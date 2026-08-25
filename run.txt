@@ -1,0 +1,103 @@
+# Convert-Py — How to Run
+
+Python/FastAPI document conversion platform with a web UI, REST API and
+LibreOffice-powered conversions.
+
+## Requirements
+
+- Python 3.11+
+- LibreOffice (`soffice` on PATH) — required for server-side conversions
+  - Debian/Ubuntu: `sudo apt install libreoffice libreoffice-writer`
+- Redis (optional) — used for rate limiting/quota; falls back to in-memory if unreachable
+
+## 1. Setup (first time)
+
+```bash
+cd /media/jobel/SSD/Projects/jowbeyl_company/apps/convert-py
+
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt -r requirements-dev.txt
+cp .env.example .env
+```
+
+`.env` works with defaults. Useful settings:
+
+| Variable        | Default                 | Notes                                   |
+| --------------- | ----------------------- | --------------------------------------- |
+| `APP_URL`       | `http://localhost:8000` | Used for canonical URLs/sitemap/robots  |
+| `ENV`           | `development`           | Set to `production` to enable HSTS + secure cookies |
+| `CORS_ORIGINS`  | `[]`                    | JSON list; empty = same-origin only     |
+| `DATABASE_URL`  | `sqlite:///./dev.db`    | Any SQLAlchemy URL                      |
+| `REDIS_URL`     | `redis://127.0.0.1:6379`| App degrades gracefully without Redis   |
+
+## 2. Run (development)
+
+```bash
+source venv/bin/activate
+uvicorn app.main:app --reload
+```
+
+or:
+
+```bash
+make dev
+```
+
+Database tables are created automatically on startup.
+
+## 3. Open in a browser
+
+| URL                          | What                                   |
+| ---------------------------- | -------------------------------------- |
+| http://localhost:8000/       | Landing page                           |
+| http://localhost:8000/convert| Working converter (upload → download)  |
+| http://localhost:8000/docs   | Interactive API docs (Swagger)         |
+| http://localhost:8000/healthz| Health check                           |
+
+## 4. Run (production)
+
+```bash
+make run    # uvicorn with 4 workers
+```
+
+Or with Docker (web + redis + worker):
+
+```bash
+make web    # docker compose -f docker/docker-compose.yml up --build
+```
+
+## 5. Tests & lint
+
+```bash
+make test    # pytest — self-contained, no running server needed
+make lint    # ruff check
+make format  # ruff format
+```
+
+The end-to-end test (Markdown → PDF) is skipped automatically if
+LibreOffice is not installed.
+
+## 6. Quick API smoke test
+
+```bash
+# upload a file
+curl -X POST http://localhost:8000/api/v1/files/upload \
+     -F "file=@notes.md"
+
+# create a conversion job (replace FILE_ID with fileId from upload)
+curl -X POST http://localhost:8000/api/v1/jobs/ \
+     -H 'Content-Type: application/json' \
+     -d '{"tasks":[{"operation":"convert","input":"FILE_ID","outputFormat":"pdf"}]}'
+
+# poll until status is "done", then download the output
+curl -OJ http://localhost:8000/api/v1/files/OUTPUT_ID/download
+```
+
+## Troubleshooting
+
+- **"no such table" errors** — delete `dev.db` and restart; tables are
+  recreated automatically on boot.
+- **Conversions fail with `ENGINE_UNAVAILABLE`** — LibreOffice is missing;
+  install `soffice` and confirm with `soffice --version`.
+- **Port 8000 busy** — run `uvicorn app.main:app --port 8001`.

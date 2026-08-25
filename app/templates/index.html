@@ -1,0 +1,145 @@
+{% extends "base.html" %}
+
+{% block structured_data %}
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "Do my files stay private?",
+      "acceptedAnswer": { "@type": "Answer", "text": "Server conversions are processed, then automatically deleted. Browser tools (merge, split, rotate, watermark) never upload your files at all — everything happens on your device." }
+    },
+    {
+      "@type": "Question",
+      "name": "Which formats can I convert?",
+      "acceptedAnswer": { "@type": "Answer", "text": "Word, PowerPoint, Excel, PDF, CSV, RTF, EPUB, HTML, Markdown, text and common image formats. Word to PDF, PDF to Word, Excel to PDF and many more pairs are supported." }
+    },
+    {
+      "@type": "Question",
+      "name": "How much does it cost?",
+      "acceptedAnswer": { "@type": "Answer", "text": "Guests get free conversions every day, no account required." }
+    }
+  ]
+}
+</script>
+{% endblock %}
+
+{% block content %}
+<section class="hero">
+  <div class="container hero-grid">
+    <div class="hero-copy">
+      <div class="eyebrow">Browser-first document conversion</div>
+      <h1 class="hero-title">
+        Convert<br>
+        loudly,<br>
+        privately.
+      </h1>
+      <p class="hero-sub">
+        Convert Word, PDF, PowerPoint, Excel, images and more. Server conversions are auto-deleted — privacy isn't a feature, it's the default.
+      </p>
+      <div class="hero-actions">
+        <a class="btn btn-primary btn-lg" href="/convert">
+          Start converting
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+        </a>
+        <span class="muted text-sm">Free for guests · no account needed</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section" id="how">
+  <div class="container">
+    <h2 class="section-title">Three steps. No friction.</h2>
+    <ol class="steps-grid">
+      <li class="step-card">
+        <div class="step-num" aria-hidden="true">01</div>
+        <h3>Drop a file</h3>
+        <p>Drag it in or browse. We detect the format instantly.</p>
+      </li>
+      <li class="step-card">
+        <div class="step-num" aria-hidden="true">02</div>
+        <h3>Pick a target</h3>
+        <p>Choose from every conversion your file supports.</p>
+      </li>
+      <li class="step-card">
+        <div class="step-num" aria-hidden="true">03</div>
+        <h3>Download</h3>
+        <p>Watch live progress, then save the result.</p>
+      </li>
+    </ol>
+  </div>
+</section>
+
+<section class="section section-alt" id="formats">
+  <div class="container">
+    <div class="section-head">
+      <h2 class="section-title">Formats that just work</h2>
+      <p class="muted">{{ conversions|length }} server-side conversions across documents, slides, sheets, web and text.</p>
+    </div>
+    <ul class="format-grid">
+      {% for c in conversions %}
+      <li class="format-chip">
+        <span class="format-pair">{{ c.shortLabel }}</span>
+        <span class="format-desc muted">{{ c.description }}</span>
+      </li>
+      {% endfor %}
+    </ul>
+    <div class="section-cta">
+      <a class="btn btn-primary" href="/convert">Open the converter</a>
+    </div>
+  </div>
+</section>
+
+<section class="section" id="privacy">
+  <div class="container split-grid">
+    <div>
+      <h2 class="section-title">Private by architecture</h2>
+      <p class="muted">
+        Server conversions run headless in an isolated workspace and are deleted automatically.
+        Tools marked <strong>on-device</strong> — merge, split, rotate, watermark — never leave
+        your browser. No account, no tracking pixels, no data resale. Ever.
+      </p>
+      <a class="text-link" href="/privacy">Read the full privacy note &rarr;</a>
+    </div>
+    <div class="trust-list">
+      <div class="trust-item"><span class="trust-k">Auto-delete</span><span class="trust-v">Server files removed after a short window</span></div>
+      <div class="trust-item"><span class="trust-k">On-device tools</span><span class="trust-v">PDF tools run 100% client-side</span></div>
+      <div class="trust-item"><span class="trust-k">No accounts</span><span class="trust-v">Convert as a guest, no email required</span></div>
+    </div>
+  </div>
+</section>
+
+<section class="section section-alt" id="faq">
+  <div class=" container narrow">
+    <h2 class="section-title">Questions, answered</h2>
+    <div class="faq-list">
+      <details class="faq-item">
+        <summary>Do my files stay private?</summary>
+        <p>Yes. Server conversions are processed then automatically deleted. On-device tools never upload anything at all.</p>
+      </details>
+      <details class="faq-item">
+        <summary>Which formats can I convert?</summary>
+        <p>Word, PowerPoint, Excel, PDF, CSV, RTF, EPUB, HTML, Markdown, plain text and common images — see the full matrix above.</p>
+      </details>
+      <details class="faq-item">
+        <summary>How much does it cost?</summary>
+        <p>Guests get free conversions daily, no account required.</p>
+      </details>
+      <details class="faq-item">
+        <summary>Why is my file rejected?</summary>
+        <p>Each conversion has a size cap and a supported source list. The converter tells you both before you commit.</p>
+      </details>
+    </div>
+  </div>
+</section>
+
+<section class="section cta-band">
+  <div class="container cta-inner">
+    <h2 class="cta-title">Your next conversion is 20 seconds away.</h2>
+    <a class="btn btn-invert btn-lg" href="/convert">Start converting free</a>
+  </div>
+</section>
+{% endblock %}

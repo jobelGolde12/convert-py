@@ -1,0 +1,37 @@
+from __future__ import annotations
+
+import os
+import tempfile
+
+# Isolate environment BEFORE app modules are imported.
+_TMP = tempfile.mkdtemp(prefix="convert-test-")
+os.environ["DATABASE_URL"] = f"sqlite:///{_TMP}/test.db"
+os.environ["LOCAL_STORAGE_ROOT"] = os.path.join(_TMP, "storage")
+os.environ["REDIS_URL"] = "redis://127.0.0.1:1"  # unreachable -> memory fallback
+os.environ["ENV"] = "development"
+
+import pytest
+from fastapi.testclient import TestClient
+
+
+@pytest.fixture(autouse=True)
+def _isolated_memory_state():
+    """Reset the in-memory quota/rate-limit store around every test."""
+    import app.services.quota_service as quota_service
+
+    quota_service._mem._windows.clear()
+    yield
+    quota_service._mem._windows.clear()
+
+
+@pytest.fixture()
+def client(monkeypatch):
+    # Force in-memory quota/rate-limit state so tests never depend on Redis.
+    import app.services.quota_service as quota_service
+
+    monkeypatch.setattr(quota_service, "_redis_client", lambda: None)
+
+    from app.main import create_app
+
+    with TestClient(create_app()) as c:
+        yield c

@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+
+{% block title %}Terms — {{ app_name }}{% endblock %}
+{% block description %}The terms that apply when you use Convert.{% endblock %}
+
+{% block content %}
+<section class="section">
+  <div class="container narrow prose">
+    <div class="eyebrow">Legal</div>
+    <h1 class="page-title">Terms of use</h1>
+    <p class="muted page-sub">The short, human-readable rules for using Convert.</p>
+
+    <h2>1. The service</h2>
+    <p>Convert changes documents between formats. Guests receive a daily free allowance; availability is not guaranteed and may change.</p>
+
+    <h2>2. Your files</h2>
+    <p>You keep all rights to the files you upload. You confirm you have permission to convert them. Server-side files are deleted automatically after a short retention window.</p>
+
+    <h2>3. Acceptable use</h2>
+    <ul>
+      <li>No malware, illegal content, or content you lack rights to.</li>
+      <li>No attempts to overload, probe, or bypass rate limits and quotas.</li>
+      <li>No automated abuse of the free tier.</li>
+    </ul>
+
+    <h2>4. No warranty</h2>
+    <p>The service is provided "as is", without warranty of any kind. Conversion fidelity depends on source documents; complex layouts may not survive every conversion. Keep your originals.</p>
+
+    <h2>5. Liability</h2>
+    <p>To the maximum extent permitted by law, we are not liable for indirect or consequential damages, including data loss arising from use of the service.</p>
+
+    <h2>6. Changes</h2>
+    <p>These terms may be updated; continued use constitutes acceptance. Material changes will be noted on this page.</p>
+  </div>
+</section>
+{% endblock %}

@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+
+{% block title %}Convert a file — {{ app_name }}{% endblock %}
+{% block description %}Upload a document, pick an output format and convert. Word, PDF, PowerPoint, Excel, images and more — with live progress and auto-deleting files.{% endblock %}
+
+{% block content %}
+<section class="section converter-section">
+  <div class="container narrow">
+    <div class="eyebrow">Converter</div>
+    <h1 class="page-title">Drop it. Convert it. Done.</h1>
+    <p class="muted page-sub">
+      Server conversions are processed then deleted automatically. On-device tools never upload a byte.
+    </p>
+
+    <noscript>
+      <div class="notice notice-error" role="alert">
+        The converter needs JavaScript. You can still use the REST API directly:
+        see <code>/docs</code> on this server.
+      </div>
+    </noscript>
+
+    <div id="converter" class="converter" data-catalog="{{ catalog_json }}">
+      <form id="convert-form" novalidate>
+        <div id="dropzone" class="dropzone" tabindex="0" role="button"
+             aria-label="Choose or drop a file to convert"
+             aria-describedby="dz-hint">
+          <input id="file-input" type="file" hidden>
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m17 8-5-5-5 5"/><path d="M12 3v12"/></svg>
+          <p class="dropzone-title" id="dz-title"><strong>Click to choose</strong> or drag &amp; drop</p>
+          <p class="muted text-sm" id="dz-hint">Word, PDF, PowerPoint, Excel, CSV, RTF, EPUB, HTML, Markdown, text, images</p>
+        </div>
+      </form>
+
+      <div id="file-card" class="file-card" hidden>
+        <div class="file-meta">
+          <span id="file-name" class="file-name"></span>
+          <span id="file-size" class="muted text-sm"></span>
+          <span id="file-format" class="badge"></span>
+        </div>
+        <button id="remove-file" class="icon-btn" type="button" aria-label="Remove selected file">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+
+      <div id="target-row" class="target-row" hidden>
+        <label class="label" for="target-select">Convert to</label>
+        <select id="target-select" class="select"></select>
+        <button id="convert-btn" class="btn btn-primary btn-lg" type="button">Convert</button>
+      </div>
+
+      <div id="progress-wrap" class="progress-wrap" hidden aria-live="polite">
+        <div class="progress-head">
+          <span id="progress-label">Working&hellip;</span>
+          <span id="progress-pct" class="muted">0%</span>
+        </div>
+        <div class="progress-track" role="progressbar" aria-labelledby="progress-label"
+             aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="progress-bar">
+          <div class="progress-fill" id="progress-fill"></div>
+        </div>
+      </div>
+
+      <div id="result" class="result" hidden aria-live="polite">
+        <p class="result-title" id="result-title"></p>
+        <a id="download-btn" class="btn btn-primary btn-lg" href="#" download>Download file</a>
+      </div>
+
+      <div id="error-box" class="notice notice-error" role="alert" hidden></div>
+
+      <p id="quota-note" class="muted text-sm quota-note"></p>
+    </div>
+  </div>
+</section>
+
+<section class="section section-alt">
+  <div class="container narrow">
+    <h2 class="section-title">Good to know</h2>
+    <ul class="know-list muted">
+      <li>Guests get {{ anon_limit }} conversions per day; failed jobs never count against you.</li>
+      <li>Files are removed from the server shortly after conversion.</li>
+      <li>Browser-only tools (merge, split, rotate, watermark) are coming to this page.</li>
+    </ul>
+  </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>window.__ANON_LIMIT__ = {{ anon_limit }};</script>
+{% endblock %}

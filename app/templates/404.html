@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+
+{% block title %}Page not found — {{ app_name }}{% endblock %}
+{% block description %}This page does not exist. Head back to the converter.{% endblock %}
+
+{% block content %}
+<section class="section error-section">
+  <div class="container narrow center">
+    <div class="eyebrow">404</div>
+    <h1 class="page-title">This page converted itself somewhere else.</h1>
+    <p class="muted page-sub">The address you followed doesn't exist — but the converter is one click away.</p>
+    <a class="btn btn-primary btn-lg" href="/">Back to home</a>
+  </div>
+</section>
+{% endblock %}
