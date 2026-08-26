@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 from contextlib import contextmanager
-from typing import Generator
+from typing import Any, Generator
 from urllib.parse import parse_qs, urlparse
 
 from sqlalchemy import create_engine, event
@@ -11,6 +11,20 @@ from sqlalchemy.orm import Session, sessionmaker
 from app.core.config import settings
 
 logger = logging.getLogger("convert.db")
+
+
+class _LibSQLProxy:
+    """Wrapper around libsql Connection that stubs out methods
+    SQLAlchemy's SQLite dialect expects but libsql doesn't implement."""
+
+    def __init__(self, conn: Any):
+        object.__setattr__(self, "_conn", conn)
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(object.__getattribute__(self, "_conn"), name)
+
+    def create_function(self, *args, **kwargs):
+        pass
 
 
 def _make_engine():
@@ -37,7 +51,6 @@ def _make_turso_engine():
 
     parsed = urlparse(raw_url.replace("sqlite+libsql://", "libsql://"))
     host = parsed.hostname or ""
-    port = parsed.port or 3306
     database = parsed.path.lstrip("/") or ""
     auth_token = token or parsed.password or ""
 
@@ -49,16 +62,18 @@ def _make_turso_engine():
         if sync_url:
             db_path = local_path or f"/tmp/{database}.db"
             logger.info("Turso embedded replica: local=%s sync=%s", db_path, sync_url)
-            return libsql.connect(
+            conn = libsql.connect(
                 database=db_path,
                 sync_url=sync_url,
                 auth_token=auth_token,
             )
-        libsql_url = f"libsql://{host}:{port}/{database}"
-        if auth_token:
-            libsql_url += f"?authToken={auth_token}"
-        logger.info("Turso remote: %s:%s/%s", host, port, database)
-        return libsql.connect(database=libsql_url)
+        else:
+            libsql_url = f"libsql://{host}"
+            if database:
+                libsql_url += f"/{database}"
+            logger.info("Turso remote: %s/%s", host, database)
+            conn = libsql.connect(database=libsql_url, auth_token=auth_token)
+        return _LibSQLProxy(conn)
 
     engine = create_engine(
         "sqlite://",
