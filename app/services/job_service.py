@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import uuid
+from datetime import timedelta
 from typing import Any
 
 from sqlalchemy import select, update
@@ -10,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from app.core.clock import utcnow
 from app.core.config import settings
+from app.core.analytics import track_event
 from app.core.database import session_scope
 from app.core.exceptions import (
     ConflictStateError,
@@ -20,7 +23,7 @@ from app.core.exceptions import (
     UnsupportedFormatError,
 )
 from app.models.models import Conversion, File, Job, Task
-from app.core.conversions_catalog import CONVERSIONS, detect_format, extension_for
+from app.core.conversions_catalog import detect_format, extension_for, find_conversion
 from app.services.conversion_service import (
     convert_with_soffice,
     markdown_to_html,
@@ -29,13 +32,6 @@ from app.services.conversion_service import (
 )
 from app.services.file_service import mime_for
 from app.services.storage_service import get_storage
-
-
-def get_conversion(source: str, target: str) -> Any | None:
-    for c in CONVERSIONS:
-        if source in c.from_ and c.to == target:
-            return c
-    return None
 
 
 def create_server_job(
@@ -59,7 +55,7 @@ def create_server_job(
     if not source:
         raise UnsupportedFormatError("Could not detect source format")
 
-    conversion = get_conversion(source, spec["outputFormat"])
+    conversion = find_conversion(source, spec["outputFormat"])
     if not conversion:
         raise UnsupportedConversionError(f"No conversion from {source} to {spec['outputFormat']}")
     if conversion.location != "server":
@@ -96,6 +92,17 @@ def _set_task_progress(db: Session, task_id: str, progress: int) -> None:
     db.commit()
 
 
+_PATH_RE = re.compile(r"(/[a-zA-Z0-9_./-]+|[A-Z]:\\[^\s]+)")
+_STACK_FRAME_RE = re.compile(r'File "[^"]+"')
+
+
+def _sanitize_error_message(message: str) -> str:
+    """Remove internal paths and system details from error messages returned to clients."""
+    sanitized = _PATH_RE.sub("[path]", message)
+    sanitized = _STACK_FRAME_RE.sub('File "[hidden]"', sanitized)
+    return sanitized[:200]
+
+
 def _fail_job(
     db: Session,
     job_id: str,
@@ -111,7 +118,7 @@ def _fail_job(
             .values(
                 status="error",
                 error_code=code,
-                error_message=message[:500],
+                error_message=_sanitize_error_message(message)[:500],
                 ended_at=utcnow(),
             ),
         )
@@ -121,7 +128,7 @@ def _fail_job(
         .values(
             status="error",
             error_code=code,
-            error_message=message[:500],
+            error_message=_sanitize_error_message(message)[:500],
             ended_at=utcnow(),
         ),
     )
@@ -165,7 +172,7 @@ def process_office_job(job_id: str, guest_id: str | None = None) -> None:
         source = detect_format(input_file.filename, input_file.mime_type) or "unknown"
         parsed = json.loads(task.options or "{}") if task.options else {}
         target = parsed.get("outputFormat", "pdf")
-        conversion = get_conversion(source, target)
+        conversion = find_conversion(source, target)
         if not conversion:
             _fail_job(
                 db,
@@ -223,14 +230,14 @@ def process_office_job(job_id: str, guest_id: str | None = None) -> None:
             out_file = File(
                 id=out_id,
                 storage_key=storage_key,
-                bucket="convert-files",
+                bucket=settings.storage_backend,
                 filename=input_file.filename.rsplit(".", 1)[0] + "." + extension_for(target),
                 mime_type=mime_for(target),
                 size_bytes=len(out_buf),
                 checksum_sha256=sha256(out_buf),
                 status="done",
                 source="output",
-                retention_until=utcnow(),
+                retention_until=utcnow() + timedelta(hours=settings.retention_anon_hours),
             )
             db.add(out_file)
 
@@ -258,7 +265,6 @@ def process_office_job(job_id: str, guest_id: str | None = None) -> None:
 
             db.add(
                 Conversion(
-                    user_id=job.user_id,
                     job_id=job_id,
                     source_format=source,
                     target_format=target,
@@ -277,10 +283,28 @@ def process_office_job(job_id: str, guest_id: str | None = None) -> None:
             task.ended_at = utcnow()
             task.output_file_id = out_id
             db.commit()
+
+            track_event(
+                "conversion_completed",
+                job_id=job_id,
+                source_format=source,
+                target_format=target,
+                engine=conversion.engine,
+                duration_ms=elapsed,
+                input_bytes=input_file.size_bytes,
+                output_bytes=len(out_buf),
+            )
         except Exception as exc:
             code = exc.code if isinstance(exc, OfficeError) else "CONVERSION_FAILED"
             message = str(exc)[:500]
             _fail_job(db, job_id, task.id, code, message, guest_id)
+            track_event(
+                "conversion_failed",
+                job_id=job_id,
+                source_format=source,
+                target_format=target,
+                error_type=code,
+            )
             if out_id and storage_key:
                 try:
                     db.delete(db.get(File, out_id))
@@ -310,7 +334,14 @@ def process_office_job(job_id: str, guest_id: str | None = None) -> None:
 
 
 def get_job_for_api(db: Session, job_id: str) -> dict[str, Any] | None:
-    job = db.get(Job, job_id)
+    from sqlalchemy.orm import selectinload
+
+    stmt = (
+        select(Job)
+        .options(selectinload(Job.tasks).selectinload(Task.output))  # avoid N+1
+        .where(Job.id == job_id)
+    )
+    job = db.execute(stmt).scalar_one_or_none()
     if not job:
         return None
 

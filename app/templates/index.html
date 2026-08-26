@@ -33,11 +33,11 @@
       <div class="eyebrow">Browser-first document conversion</div>
       <h1 class="hero-title">
         Convert<br>
-        loudly,<br>
+        anything,<br>
         privately.
       </h1>
       <p class="hero-sub">
-        Convert Word, PDF, PowerPoint, Excel, images and more. Server conversions are auto-deleted — privacy isn't a feature, it's the default.
+        Word, PDF, PowerPoint, Excel, images and more. Server conversions are auto-deleted — privacy isn't a feature, it's the default.
       </p>
       <div class="hero-actions">
         <a class="btn btn-primary btn-lg" href="/convert">
@@ -52,7 +52,10 @@
 
 <section class="section" id="how">
   <div class="container">
-    <h2 class="section-title">Three steps. No friction.</h2>
+    <div class="section-head">
+      <h2 class="section-title">Three steps. No friction.</h2>
+      <p class="muted">No account, no setup, no waiting. Just drop a file and go.</p>
+    </div>
     <ol class="steps-grid">
       <li class="step-card">
         <div class="step-num" aria-hidden="true">01</div>
@@ -77,7 +80,7 @@
   <div class="container">
     <div class="section-head">
       <h2 class="section-title">Formats that just work</h2>
-      <p class="muted">{{ conversions|length }} server-side conversions across documents, slides, sheets, web and text.</p>
+      <p class="muted">{{ conversions|length }} server-side conversions across documents, slides, sheets, web and text. All processed instantly.</p>
     </div>
     <ul class="format-grid">
       {% for c in conversions %}
@@ -114,7 +117,7 @@
 
 <section class="section section-alt" id="faq">
   <div class=" container narrow">
-    <h2 class="section-title">Questions, answered</h2>
+    <h2 class="section-title">Questions, answered.</h2>
     <div class="faq-list">
       <details class="faq-item">
         <summary>Do my files stay private?</summary>

@@ -22,9 +22,11 @@ class Settings(BaseSettings):
     database_url: str = "sqlite:///./dev.db"
     redis_url: str = "redis://127.0.0.1:6379"
 
+    # Turso / libSQL (optional — falls back to local SQLite when unset)
+    turso_database_url: str = ""
+    turso_auth_token: str = ""
+
     retention_anon_hours: int = 1
-    retention_free_hours: int = 24
-    retention_paid_hours: int = 168
 
     anon_conversions_per_day: int = 5
     anon_req_per_min: int = 60
@@ -41,8 +43,6 @@ class Settings(BaseSettings):
 
     storage_backend: Literal["local", "r2", "s3"] = "local"
     local_storage_root: str = os.path.join(os.getcwd(), "storage")
-
-    upload_signing_secret: str = ""
 
     @property
     def upload_secret_is_default(self) -> bool:

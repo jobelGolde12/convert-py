@@ -38,6 +38,12 @@ class LocalStorage:
     def exists(self, key: str) -> bool:
         return os.path.exists(self._path(key))
 
+    def iter_bytes(self, key: str, chunk_size: int = 64 * 1024) -> Iterator[bytes]:
+        """Stream a stored object in chunks without loading it into memory."""
+        with open(self._path(key), "rb") as f:
+            while chunk := f.read(chunk_size):
+                yield chunk
+
 
 class R2Storage:
     def __init__(self) -> None:
@@ -83,8 +89,17 @@ class R2Storage:
         except Exception:
             return False
 
+    def iter_bytes(self, key: str, chunk_size: int = 64 * 1024) -> Iterator[bytes]:
+        """Stream a stored object from R2 in chunks without buffering it fully."""
+        response = self.client.get_object(Bucket=self.bucket, Key=key)
+        body = response["Body"]
+        yield from body.iter_chunks(chunk_size)
+
 
 def get_storage() -> LocalStorage | R2Storage:
     if settings.storage_backend == "r2":
         return R2Storage()
     return LocalStorage(settings.local_storage_root)
+
+
+StorageBackend = LocalStorage | R2Storage

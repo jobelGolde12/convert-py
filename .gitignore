@@ -12,15 +12,21 @@ venv/
 
 # Environment / secrets
 .env
-.env.local
+.env.*
+!.env.example
 
 # Databases
 *.db
+*.db-shm
+*.db-wal
+*.db-journal
 *.sqlite3
 
 # Runtime data
 storage/
 /tmp/
+convert-test-*/
+convert-bench-*/
 
 # Tooling caches
 .pytest_cache/
@@ -33,3 +39,6 @@ htmlcov/
 .vscode/
 .idea/
 .DS_Store
+
+# AI tooling
+.opencode/

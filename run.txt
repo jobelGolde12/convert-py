@@ -30,6 +30,8 @@ cp .env.example .env
 | `CORS_ORIGINS`  | `[]`                    | JSON list; empty = same-origin only     |
 | `DATABASE_URL`  | `sqlite:///./dev.db`    | Any SQLAlchemy URL                      |
 | `REDIS_URL`     | `redis://127.0.0.1:6379`| App degrades gracefully without Redis   |
+| `TURSO_DATABASE_URL` | *(empty)*          | Turso libSQL URL (overrides DATABASE_URL) |
+| `TURSO_AUTH_TOKEN`   | *(empty)*          | Turso auth token                        |
 
 ## 2. Run (development)
 

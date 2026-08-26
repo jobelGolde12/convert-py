@@ -2,15 +2,16 @@ from __future__ import annotations
 
 import asyncio
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Annotated
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, Response
 from fastapi.responses import StreamingResponse
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
-from app.api.dependencies.rate_limit import enforce_rate_limit
+from app.api.dependencies.rate_limit import enforce_rate_limit, guest_identity
 from app.api.schemas import JobCreateInput
+from app.core.analytics import track_event
 from app.core.clock import iso_now, utcnow
 from app.core.conversions_catalog import find_conversion
 from app.core.database import get_db, session_scope
@@ -102,7 +103,11 @@ async def list_jobs(
     identity = guard.identity
     limit = min(max(limit, 1), 50)
 
-    query = db.query(Job).filter(Job.guest_id == identity)
+    query = (
+        db.query(Job)
+        .options(selectinload(Job.tasks))  # avoid N+1 lazy loads per job
+        .filter(Job.guest_id == identity)
+    )
     if cursor:
         ts_str, _, cursor_id = cursor.partition(":")
         try:
@@ -110,7 +115,7 @@ async def list_jobs(
         except ValueError:
             ts = 0
         # DB stores naive UTC datetimes; compare with naive to avoid tz mismatches.
-        cursor_dt = datetime.utcfromtimestamp(ts)  # noqa: DTZ004 (naive UTC by design)
+        cursor_dt = datetime.fromtimestamp(ts, tz=timezone.utc).replace(tzinfo=None)
         if cursor_id:
             query = query.filter(
                 (Job.created_at < cursor_dt)
@@ -141,17 +146,39 @@ async def list_jobs(
     return {"jobs": [serialize(j) for j in page], "nextCursor": next_cursor}
 
 
-@router.get("/{job_id}")
-async def get_job(job_id: str, db: Annotated[Session, Depends(get_db)]):
+def _owned_job_or_404(db: Session, job_id: str, identity: str | None) -> Job | None:
+    """Return the job when it exists and belongs to this guest (or has no owner)."""
     job = db.get(Job, job_id)
+    if not job:
+        return None
+    if job.guest_id and identity and job.guest_id != identity:
+        return None
+    return job
+
+
+@router.get("/{job_id}")
+async def get_job(
+    job_id: str,
+    request: Request,
+    response: Response,
+    db: Annotated[Session, Depends(get_db)],
+):
+    identity = await guest_identity(request, response)
+    job = _owned_job_or_404(db, job_id, identity)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
     return get_job_for_api(db, job_id)
 
 
 @router.post("/{job_id}/cancel")
-async def cancel_job(job_id: str, db: Annotated[Session, Depends(get_db)]):
-    job = db.get(Job, job_id)
+async def cancel_job(
+    job_id: str,
+    request: Request,
+    response: Response,
+    db: Annotated[Session, Depends(get_db)],
+):
+    identity = await guest_identity(request, response)
+    job = _owned_job_or_404(db, job_id, identity)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
     if job.status in {"done", "error", "cancelled"}:
@@ -163,29 +190,26 @@ async def cancel_job(job_id: str, db: Annotated[Session, Depends(get_db)]):
         task.status = "cancelled"
         task.ended_at = utcnow()
     db.commit()
+    track_event("job_cancelled", job_id=job.id)
     return {"id": job.id, "status": "cancelled", "cancelled": True}
 
 
 @router.get("/{job_id}/events")
-async def job_events(job_id: str, request: Request, db: Annotated[Session, Depends(get_db)]):
-    job = db.get(Job, job_id)
+async def job_events(
+    job_id: str,
+    request: Request,
+    response: Response,
+    db: Annotated[Session, Depends(get_db)],
+):
+    identity = await guest_identity(request, response)
+    job = _owned_job_or_404(db, job_id, identity)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
 
     async def event_generator():
         last_payload = None
         try:
-            with session_scope() as poll_db:
-                initial = get_job_for_api(poll_db, job_id)
-            if initial:
-                payload = json.dumps(initial)
-                yield f"event: job\ndata: {payload}\n\n"
-                if initial["status"] in {"done", "error", "cancelled"}:
-                    return
-
             while True:
-                if await request.is_disconnected():
-                    break
                 with session_scope() as poll_db:
                     current = get_job_for_api(poll_db, job_id)
                 if not current:
@@ -197,6 +221,8 @@ async def job_events(job_id: str, request: Request, db: Annotated[Session, Depen
                 if current["status"] in {"done", "error", "cancelled"}:
                     break
                 await asyncio.sleep(0.6)
+                if await request.is_disconnected():
+                    break
         except asyncio.CancelledError:
             pass
 

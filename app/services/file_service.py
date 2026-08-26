@@ -1,57 +1,5 @@
 from __future__ import annotations
 
-import hashlib
-import hmac
-import time
-from typing import Any
-
-from app.core.config import settings
-
-
-def sign_payload(payload: bytes) -> str:
-    secret = settings.upload_signing_secret or settings.upload_secret or "dev"
-    return hmac.new(secret.encode("utf-8"), payload, hashlib.sha256).hexdigest()
-
-
-def create_signed_upload(path: str, expires_in: int = 900) -> dict[str, Any]:
-    expires_at = int(time.time()) + expires_in
-    payload = f"upload:{path}:{expires_at}".encode("utf-8")
-    signature = sign_payload(payload)
-    return {
-        "signedPath": path,
-        "expiresAt": expires_at,
-        "signature": signature,
-    }
-
-
-def verify_signed_upload(path: str, expires_at: int, signature: str) -> bool:
-    payload = f"upload:{path}:{expires_at}".encode("utf-8")
-    expected = sign_payload(payload)
-    return hmac.compare_digest(expected, signature)
-
-
-def file_extension_for(target: str) -> str:
-    mapping = {
-        "pdf": "pdf",
-        "docx": "docx",
-        "doc": "doc",
-        "xlsx": "xlsx",
-        "pptx": "pptx",
-        "html": "html",
-        "txt": "txt",
-        "md": "md",
-        "png": "png",
-        "jpg": "jpg",
-        "jpeg": "jpeg",
-        "webp": "webp",
-        "gif": "gif",
-        "bmp": "bmp",
-        "csv": "csv",
-        "rtf": "rtf",
-        "epub": "epub",
-    }
-    return mapping.get(target, target)
-
 
 def mime_for(target: str) -> str:
     mapping = {

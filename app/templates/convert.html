@@ -9,7 +9,8 @@
     <div class="eyebrow">Converter</div>
     <h1 class="page-title">Drop it. Convert it. Done.</h1>
     <p class="muted page-sub">
-      Server conversions are processed then deleted automatically. On-device tools never upload a byte.
+      Server conversions are processed then deleted automatically.
+      On-device tools never upload a byte.
     </p>
 
     <noscript>
@@ -24,7 +25,7 @@
         <div id="dropzone" class="dropzone" tabindex="0" role="button"
              aria-label="Choose or drop a file to convert"
              aria-describedby="dz-hint">
-          <input id="file-input" type="file" hidden>
+          <input id="file-input" type="file" hidden aria-label="Choose a file to convert">
           <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m17 8-5-5-5 5"/><path d="M12 3v12"/></svg>
           <p class="dropzone-title" id="dz-title"><strong>Click to choose</strong> or drag &amp; drop</p>
           <p class="muted text-sm" id="dz-hint">Word, PDF, PowerPoint, Excel, CSV, RTF, EPUB, HTML, Markdown, text, images</p>
@@ -75,9 +76,9 @@
   <div class="container narrow">
     <h2 class="section-title">Good to know</h2>
     <ul class="know-list muted">
-      <li>Guests get {{ anon_limit }} conversions per day; failed jobs never count against you.</li>
+      <li>Guests get {{ anon_limit }} free conversions per day — failed jobs never count against you.</li>
       <li>Files are removed from the server shortly after conversion.</li>
-      <li>Browser-only tools (merge, split, rotate, watermark) are coming to this page.</li>
+      <li>Browser-only tools (merge, split, rotate, watermark) are coming soon.</li>
     </ul>
   </div>
 </section>

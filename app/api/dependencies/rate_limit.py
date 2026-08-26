@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import hashlib
+import hmac
 
 from fastapi import Request, Response
 
 from app.services.quota_service import check_rate_limit, increment_daily
 from app.core.config import settings
+
+_COOKIE_NAME = "convert-guest-id"
 
 
 class RateLimitGuard:
@@ -13,6 +16,12 @@ class RateLimitGuard:
         self.identity = identity
         self.remaining = remaining
         self.limit = limit
+
+
+def _sign(value: str) -> str:
+    """Return HMAC-SHA256 hex digest for *value*."""
+    secret = (settings.secret_key or "dev").encode()
+    return hmac.new(secret, value.encode(), hashlib.sha256).hexdigest()
 
 
 def _anonymous_identity(request: Request) -> str:
@@ -29,20 +38,27 @@ def _anonymous_identity(request: Request) -> str:
 
 
 async def guest_identity(request: Request, response: Response) -> str:
-    guest_id = request.cookies.get("convert-guest-id")
-    if guest_id:
-        return guest_id
+    raw_cookie = request.cookies.get(_COOKIE_NAME)
+    if raw_cookie:
+        # Verify HMAC signature to prevent cookie spoofing.
+        parts = raw_cookie.split(".", 1)
+        if len(parts) == 2:
+            payload, sig = parts
+            if hmac.compare_digest(sig, _sign(payload)):
+                return payload
+        # Invalid/tampered cookie — fall through to generate a new one.
 
-    guest_id = _anonymous_identity(request)
+    identity = _anonymous_identity(request)
+    signed = f"{identity}.{_sign(identity)}"
     response.set_cookie(
-        "convert-guest-id",
-        guest_id,
+        _COOKIE_NAME,
+        signed,
         max_age=365 * 24 * 60 * 60,
         httponly=True,
         samesite="lax",
         secure=settings.is_prod,
     )
-    return guest_id
+    return identity
 
 
 async def enforce_rate_limit(request: Request, response: Response) -> RateLimitGuard | Response:

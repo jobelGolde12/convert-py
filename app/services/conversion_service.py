@@ -83,8 +83,7 @@ def convert_with_soffice(
         ) from exc
 
     base = Path(input_path).stem
-    out_ext = target if target not in {"html", "txt"} else target
-    candidate = Path(out_dir) / f"{base}.{out_ext}"
+    candidate = Path(out_dir) / f"{base}.{target}"
     if candidate.exists():
         return ConversionResult(str(candidate), proc.stdout, proc.stderr)
 

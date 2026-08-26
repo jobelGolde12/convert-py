@@ -20,17 +20,3 @@ services:
     image: redis:7-alpine
     ports:
       - "6379:6379"
-
-  worker:
-    build:
-      context: ..
-      dockerfile: docker/Dockerfile
-    command: ["python", "-m", "app.workers.office_worker"]
-    environment:
-      - DATABASE_URL=sqlite:///./dev.db
-      - REDIS_URL=redis://redis:6379
-      - ENV=development
-    volumes:
-      - ../storage:/app/storage
-    depends_on:
-      - redis

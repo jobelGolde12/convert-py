@@ -1,5 +1,11 @@
 from __future__ import annotations
 
+import gzip
+import json
+import logging
+import sys
+import time
+import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 
@@ -9,6 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from app.api.routes import files, formats, jobs, quota
 from app.core.config import settings
@@ -16,7 +23,86 @@ from app.core.database import init_db
 from app.core.exceptions import AppError
 from app.core.logger import setup_logging
 
+logger = logging.getLogger("convert.request")
+
 templates = Jinja2Templates(directory="app/templates")
+
+# Content types worth compressing; SSE and binaries are excluded.
+_GZIP_TYPES = ("application/json", "text/html", "text/plain", "text/css", "javascript", "xml")
+
+
+class SmartGzipMiddleware:
+    """Compress responses only when it is safe: skip streaming (SSE) responses.
+
+    A response is considered non-streaming when it declares a Content-Length,
+    which lets us buffer-compress without breaking event streams or chunked
+    downloads. Responses below minimum_size pass through untouched.
+    """
+
+    def __init__(self, app: ASGIApp, minimum_size: int = 1024) -> None:
+        self.app = app
+        self.minimum_size = minimum_size
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        gzip_enabled = False
+        accept_encoding = ""
+        for name, value in scope.get("headers", []):
+            if name == b"accept-encoding":
+                accept_encoding = value.decode("latin-1")
+                break
+        wants_gzip = "gzip" in accept_encoding.lower()
+
+        async def send_wrapper(message: Message) -> None:
+            nonlocal gzip_enabled
+            if message["type"] == "http.response.body" and gzip_enabled:
+                message = {**message, "body": gzip.compress(message.get("body", b""))}
+                await send(message)
+                return
+            if message["type"] != "http.response.start":
+                await send(message)
+                return
+
+            headers_raw = message.get("headers", [])
+            headers = {k.decode("latin-1").lower(): v.decode("latin-1") for k, v in headers_raw}
+            content_type = headers.get("content-type", "")
+            content_length = headers.get("content-length")
+
+            compressible = any(t in content_type for t in _GZIP_TYPES)
+            if (
+                wants_gzip
+                and compressible
+                and content_length
+                and int(content_length) >= self.minimum_size
+            ):
+                gzip_enabled = True
+                new_headers = [
+                    (k, v)
+                    for k, v in headers_raw
+                    if k.decode("latin-1").lower() != "content-length"
+                ]
+                new_headers.append((b"content-encoding", b"gzip"))
+                new_headers.append((b"vary", b"Accept-Encoding"))
+                message = {**message, "headers": new_headers}
+            await send(message)
+
+        await self.app(scope, receive, send_wrapper)
+
+
+class CachedStaticFiles(StaticFiles):
+    """StaticFiles with a Cache-Control header for repeat-visit performance."""
+
+    def __init__(self, *args: object, cache_max_age: int = 3600, **kwargs: object) -> None:
+        super().__init__(*args, **kwargs)  # type: ignore[arg-type]
+        self.cache_header = f"public, max-age={cache_max_age}"
+
+    async def get_response(self, path: str, scope: Scope):  # type: ignore[override]
+        response = await super().get_response(path, scope)
+        response.headers.setdefault("Cache-Control", self.cache_header)
+        return response
 
 
 def _template_context(request: Request, **extra: object) -> dict[str, object]:
@@ -34,8 +120,23 @@ def _template_context(request: Request, **extra: object) -> dict[str, object]:
 
 @asynccontextmanager
 async def lifespan(application: FastAPI):
+    if settings.is_prod:
+        _validate_production_secrets()
     init_db()
     yield
+
+
+def _validate_production_secrets() -> None:
+    """Abort startup if critical secrets still have default values."""
+    errors: list[str] = []
+    if settings.secret_key in ("", "dev-secret-key-change-me"):
+        errors.append("SECRET_KEY must be changed from its default value")
+    if settings.upload_secret in ("", "dev-only-change-me"):
+        errors.append("UPLOAD_SECRET must be changed from its default value")
+    if errors:
+        for e in errors:
+            logger.error("FATAL: %s", e)
+        sys.exit(1)
 
 
 def create_app() -> FastAPI:
@@ -51,10 +152,24 @@ def create_app() -> FastAPI:
         allow_headers=["Authorization", "Content-Type", "Idempotency-Key"],
         max_age=600,
     )
+    application.add_middleware(SmartGzipMiddleware, minimum_size=1024)
 
     @application.middleware("http")
     async def security_headers(request: Request, call_next):
+        request_id = request.headers.get("x-request-id") or uuid.uuid4().hex[:16]
+        start = time.perf_counter()
         response = await call_next(request)
+        duration_ms = round((time.perf_counter() - start) * 1000, 1)
+        logger.info(
+            "method=%s path=%s status=%s duration_ms=%s request_id=%s",
+            request.method,
+            request.url.path,
+            response.status_code,
+            duration_ms,
+            request_id,
+        )
+        response.headers.setdefault("X-Request-ID", request_id)
+        response.headers.setdefault("Server-Timing", f"app;dur={duration_ms}")
         response.headers.setdefault("X-Content-Type-Options", "nosniff")
         response.headers.setdefault("X-Frame-Options", "DENY")
         response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
@@ -67,7 +182,7 @@ def create_app() -> FastAPI:
             )
         return response
 
-    application.mount("/static", StaticFiles(directory="app/static"), name="static")
+    application.mount("/static", CachedStaticFiles(directory="app/static"), name="static")
 
     application.include_router(formats.router, prefix="/api/v1")
     application.include_router(quota.router, prefix="/api/v1")
@@ -79,6 +194,14 @@ def create_app() -> FastAPI:
     from app.core.conversions_catalog import CONVERSIONS, FORMATS
 
     server_conversions = [c for c in CONVERSIONS if c.location == "server"]
+
+    # Pre-compute catalog JSON once at startup instead of per-request.
+    _catalog_items = []
+    for c in CONVERSIONS:
+        item = c.model_dump()
+        item["from"] = item.pop("from_")
+        _catalog_items.append(item)
+    _catalog_json = json.dumps(_catalog_items).replace("</", "<\\/")
 
     @application.get("/")
     def home(request: Request):
@@ -94,20 +217,12 @@ def create_app() -> FastAPI:
 
     @application.get("/convert")
     def convert_page(request: Request):
-        import json
-
-        catalog = []
-        for c in CONVERSIONS:
-            item = c.model_dump()
-            item["from"] = item.pop("from_")
-            catalog.append(item)
-
         return templates.TemplateResponse(
             request,
             "convert.html",
             _template_context(
                 request,
-                catalog_json=json.dumps(catalog).replace("</", "<\\/"),
+                catalog_json=_catalog_json,
                 anon_limit=settings.anon_conversions_per_day,
             ),
         )

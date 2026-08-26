@@ -5,9 +5,11 @@ from datetime import timedelta
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, UploadFile
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.api.dependencies.rate_limit import enforce_daily_quota
+from app.core.analytics import track_event
 from app.core.clock import utcnow
 from app.core.config import settings
 from app.core.conversions_catalog import detect_format
@@ -48,7 +50,8 @@ async def upload_file(
 
     # Stream to storage with a hard byte cap; never trust client-declared sizes.
     file_id = uuid.uuid4().hex
-    ext = requested_name.rsplit(".", 1)[-1] if "." in requested_name else "bin"
+    raw_ext = requested_name.rsplit(".", 1)[-1] if "." in requested_name else "bin"
+    ext = "".join(c for c in raw_ext if c.isalnum()) or "bin"
     storage_key = f"files/{file_id}/{file_id}.{ext}"
 
     size_bytes = 0
@@ -74,7 +77,7 @@ async def upload_file(
     db_file = File(
         id=file_id,
         storage_key=storage_key,
-        bucket="local",
+        bucket=settings.storage_backend,
         filename=requested_name,
         mime_type=mime_type or mime_for(source_format) or "application/octet-stream",
         size_bytes=size_bytes,
@@ -83,6 +86,12 @@ async def upload_file(
     )
     db.add(db_file)
     db.commit()
+
+    track_event(
+        "file_uploaded",
+        source_format=source_format,
+        size_bytes=size_bytes,
+    )
 
     return {
         "fileId": file_id,
@@ -94,16 +103,22 @@ async def upload_file(
 
 @router.get("/{file_id}/download")
 def download_file(file_id: str, db: Annotated[Session, Depends(get_db)]):
-    from fastapi.responses import Response
-
     file = db.get(File, file_id)
     if not file or file.deleted_at:
         raise HTTPException(status_code=404, detail="Not found")
-    data = get_storage().get_bytes(file.storage_key)
-    return Response(
-        content=data,
+
+    # Stream in chunks so large outputs never buffer fully in worker memory.
+    def _stream():
+        yield from get_storage().iter_bytes(file.storage_key)
+
+    return StreamingResponse(
+        _stream(),
         media_type=file.mime_type,
-        headers={"Content-Disposition": content_disposition(file.filename)},
+        headers={
+            "Content-Disposition": content_disposition(file.filename),
+            "Content-Length": str(file.size_bytes),
+            "X-Content-Type-Options": "nosniff",
+        },
     )
 
 

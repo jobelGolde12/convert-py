@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import os
 import time
+import uuid
 from collections import defaultdict, deque
 
 from app.core.config import settings
@@ -23,7 +25,7 @@ class _WindowStore:
 
     def pop_one(self, key: str) -> bool:
         dq = self._windows.get(key)
-        if dq and dq:
+        if dq:
             dq.popleft()
             return True
         return False
@@ -45,9 +47,10 @@ async def check_rate_limit(identity: str, window_seconds: int, limit: int) -> tu
 
     if r is not None:
         try:
+            member = f"{now}-{os.getpid()}-{uuid.uuid4().hex}"
             pipe = r.pipeline(transaction=True)
             pipe.zremrangebyscore(key, 0, now - window_seconds)
-            pipe.zadd(key, {f"{now}": now})
+            pipe.zadd(key, {member: now})
             pipe.zcard(key)
             pipe.pexpire(key, window_seconds * 1000 + 1000)
             results = pipe.execute()
@@ -80,9 +83,11 @@ async def increment_daily(identity: str) -> tuple[bool, int]:
 
     if r is not None:
         try:
-            count = int(r.incr(day_key) or 0)
-            if count == 1:
-                r.expire(day_key, 24 * 3600 + 60)
+            pipe = r.pipeline(transaction=False)
+            pipe.incr(day_key)
+            pipe.expire(day_key, 24 * 3600 + 60)
+            results = pipe.execute()
+            count = int(results[0] or 0)
         except Exception:
             count = _mem_daily_count(day_key) + 1
             _mem.add(day_key, time.time())
