@@ -44,7 +44,7 @@ class Settings(BaseSettings):
     r2_public_url: str = ""
 
     storage_backend: Literal["local", "r2", "s3"] = "local"
-    local_storage_root: str = os.path.join(os.getcwd(), "storage")
+    local_storage_root: str = os.path.join(os.getenv("TMPDIR", "/tmp"), "convert-storage")
 
     @property
     def upload_secret_is_default(self) -> bool:

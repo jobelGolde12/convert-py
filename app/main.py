@@ -8,6 +8,7 @@ import time
 import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
+from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
@@ -25,7 +26,8 @@ from app.core.logger import setup_logging
 
 logger = logging.getLogger("convert.request")
 
-templates = Jinja2Templates(directory="app/templates")
+_APP_DIR = Path(__file__).resolve().parent
+templates = Jinja2Templates(directory=str(_APP_DIR / "templates"))
 
 # Content types worth compressing; SSE and binaries are excluded.
 _GZIP_TYPES = ("application/json", "text/html", "text/plain", "text/css", "javascript", "xml")
@@ -194,7 +196,7 @@ def create_app() -> FastAPI:
             )
         return response
 
-    application.mount("/static", CachedStaticFiles(directory="app/static"), name="static")
+    application.mount("/static", CachedStaticFiles(directory=str(_APP_DIR / "static")), name="static")
 
     application.include_router(formats.router, prefix="/api/v1")
     application.include_router(quota.router, prefix="/api/v1")
