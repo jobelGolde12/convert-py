@@ -18,6 +18,71 @@
     return dot === -1 ? '' : name.slice(dot + 1).toLowerCase();
   }
 
+  function escapeHtml(str) {
+    var div = document.createElement('div');
+    div.appendChild(document.createTextNode(str));
+    return div.innerHTML;
+  }
+
+  /* ------------------------------------------------ IndexedDB file store */
+
+  var DB_NAME = 'convert-pending';
+  var DB_STORE = 'files';
+  var DB_KEY = 'current';
+
+  function openDB(callback) {
+    var req;
+    try { req = indexedDB.open(DB_NAME, 1); } catch (e) { callback(null); return; }
+    req.onupgradeneeded = function (ev) {
+      var db = ev.target.result;
+      if (!db.objectStoreNames.contains(DB_STORE)) {
+        db.createObjectStore(DB_STORE);
+      }
+    };
+    req.onsuccess = function (ev) { callback(ev.target.result); };
+    req.onerror = function () { callback(null); };
+  }
+
+  function saveFileToDB(blob, meta, callback) {
+    openDB(function (db) {
+      if (!db) { callback(false); return; }
+      var tx = db.transaction(DB_STORE, 'readwrite');
+      tx.objectStore(DB_STORE).put({ blob: blob, meta: meta, ts: Date.now() }, DB_KEY);
+      tx.oncomplete = function () { callback(true); };
+      tx.onerror = function () { callback(false); };
+    });
+  }
+
+  function loadFileFromDB(callback) {
+    openDB(function (db) {
+      if (!db) { callback(null); return; }
+      var tx = db.transaction(DB_STORE, 'readonly');
+      var req = tx.objectStore(DB_STORE).get(DB_KEY);
+      req.onsuccess = function () { callback(req.result || null); };
+      req.onerror = function () { callback(null); };
+    });
+  }
+
+  function clearFileFromDB(callback) {
+    openDB(function (db) {
+      if (!db) { if (callback) callback(); return; }
+      var tx = db.transaction(DB_STORE, 'readwrite');
+      tx.objectStore(DB_STORE).delete(DB_KEY);
+      tx.oncomplete = function () { if (callback) callback(); };
+      tx.onerror = function () { if (callback) callback(); };
+    });
+  }
+
+  function saveJobToSession(jobId) {
+    try { sessionStorage.setItem('convert-job', jobId); } catch (e) {}
+  }
+  function loadJobFromSession() {
+    try { return sessionStorage.getItem('convert-job'); } catch (e) { return null; }
+  }
+  function clearJobFromSession() {
+    try { sessionStorage.removeItem('convert-job'); } catch (e) {}
+  }
+
   /* -------------------------------------------------------------- theme */
 
   function initTheme() {
@@ -70,6 +135,10 @@
       panel.hidden = !open;
       btn.setAttribute('aria-expanded', String(open));
       btn.setAttribute('aria-label', open ? 'Close menu' : 'Open menu');
+      if (open) {
+        var firstLink = panel.querySelector('a');
+        if (firstLink) firstLink.focus();
+      }
     }
 
     btn.addEventListener('click', function () {
@@ -108,7 +177,22 @@
       ['html', ['html', 'htm']],
       ['epub', ['epub']],
       ['png', ['png']], ['jpg', ['jpg', 'jpeg']], ['webp', ['webp']],
-      ['gif', ['gif']], ['bmp', ['bmp']]
+      ['gif', ['gif']], ['bmp', ['bmp']],
+      ['svg', ['svg']], ['tiff', ['tiff', 'tif']], ['ico', ['ico']],
+      ['odt', ['odt']], ['ods', ['ods']], ['odp', ['odp']],
+      ['json', ['json']], ['xml', ['xml']], ['yaml', ['yaml', 'yml']],
+      ['ini', ['ini']], ['log', ['log']], ['sql', ['sql']],
+      ['py', ['py']], ['js', ['js']], ['ts', ['ts']],
+      ['java', ['java']], ['cpp', ['cpp', 'cc', 'cxx']], ['c', ['c']],
+      ['go', ['go']], ['rs', ['rs']], ['rb', ['rb']],
+      ['php', ['php']], ['swift', ['swift']], ['kt', ['kt']],
+      ['r', ['r']], ['scala', ['scala']], ['hs', ['hs']],
+      ['lua', ['lua']], ['sh', ['sh', 'bash']], ['bat', ['bat', 'cmd']],
+      ['ps1', ['ps1']], ['vbs', ['vbs']], ['toml', ['toml']],
+      ['cfg', ['cfg', 'conf', 'config']], ['env', ['env']],
+      ['gitignore', ['gitignore']], ['makefile', ['makefile']],
+      ['cmake', ['cmake']], ['gradle', ['gradle']],
+      ['properties', ['properties']], ['csv-excel', ['csv']]
     ].forEach(function (pair) {
       pair[1].forEach(function (ext) { EXT_TO_FORMAT[ext] = pair[0]; });
     });
@@ -137,10 +221,12 @@
     var currentFile = null;
     var currentJobId = null;
     var eventSource = null;
+    var restoring = false;
 
     function showError(msg) {
-      errorBox.textContent = msg;
+      errorBox.innerHTML = escapeHtml(msg);
       errorBox.hidden = false;
+      errorBox.focus();
     }
     function clearError() {
       errorBox.hidden = true;
@@ -153,6 +239,25 @@
       progressPct.textContent = pct + '%';
       progressBar.setAttribute('aria-valuenow', String(pct));
       if (label) progressLabel.textContent = label;
+
+      var steps = progressWrap.querySelectorAll('.progress-step');
+      steps.forEach(function (step) {
+        var stepName = step.getAttribute('data-step');
+        step.classList.remove('active', 'completed');
+        if (stepName === 'upload' && pct >= 5 && pct < 40) {
+          step.classList.add('active');
+        } else if (stepName === 'upload' && pct >= 40) {
+          step.classList.add('completed');
+        } else if (stepName === 'process' && pct >= 40 && pct < 90) {
+          step.classList.add('active');
+        } else if (stepName === 'process' && pct >= 90) {
+          step.classList.add('completed');
+        } else if (stepName === 'complete' && pct >= 90) {
+          step.classList.add('active');
+        } else if (stepName === 'complete' && pct >= 100) {
+          step.classList.add('completed');
+        }
+      });
     }
 
     function refreshQuota() {
@@ -167,7 +272,7 @@
         .catch(function () { quotaNote.textContent = ''; });
     }
 
-    function populateTargets(sourceFormat) {
+    function populateTargets(sourceFormat, preselect) {
       targetSelect.innerHTML = '';
       var options = CATALOG.filter(function (c) {
         return c.from.indexOf(sourceFormat) !== -1 && c.location === 'server';
@@ -182,14 +287,29 @@
         var opt = document.createElement('option');
         opt.value = c.to;
         opt.textContent = c.label + ' (max ' + c.maxSizeMB + ' MB)';
-        if (i === 0) opt.selected = true;
+        if (preselect && c.to === preselect) opt.selected = true;
+        else if (i === 0 && !preselect) opt.selected = true;
         targetSelect.appendChild(opt);
       });
       convertBtn.disabled = false;
       clearError();
     }
 
-    function acceptFile(file) {
+    function showFileUI(file, fmt) {
+      fileNameEl.textContent = file.name;
+      fileSizeEl.textContent = formatBytes(file.size);
+      fileFormatEl.textContent = fmt;
+      fileCard.hidden = false;
+      targetRow.hidden = false;
+    }
+
+    function persistFile(file, fmt) {
+      try {
+        saveFileToDB(file, { name: file.name, size: file.size, format: fmt, ts: Date.now() }, function () {});
+      } catch (e) { /* IndexedDB unavailable */ }
+    }
+
+    function acceptFile(file, preselectTarget) {
       clearError();
       resultBox.hidden = true;
       progressWrap.hidden = true;
@@ -201,27 +321,27 @@
         currentFile = null;
         fileCard.hidden = true;
         targetRow.hidden = true;
-        showError('Unsupported file type ".' + ext + '". Try Word, PDF, PowerPoint, Excel, CSV, RTF, EPUB, HTML, Markdown, text or an image.');
+        showError('Unsupported file type ".' + escapeHtml(ext) + '". We support over 50 file types including documents, spreadsheets, presentations, images, and code files.');
         return;
       }
       currentFile = file;
-      fileNameEl.textContent = file.name;
-      fileSizeEl.textContent = formatBytes(file.size);
-      fileFormatEl.textContent = fmt;
-      fileCard.hidden = false;
-      targetRow.hidden = false;
-      populateTargets(fmt);
+      showFileUI(file, fmt);
+      populateTargets(fmt, preselectTarget);
+      if (!restoring) persistFile(file, fmt);
     }
 
     function resetAll() {
       currentFile = null;
       if (eventSource) { eventSource.close(); eventSource = null; }
+      currentJobId = null;
       fileInput.value = '';
       fileCard.hidden = true;
       targetRow.hidden = true;
       progressWrap.hidden = true;
       resultBox.hidden = true;
       clearError();
+      clearFileFromDB();
+      clearJobFromSession();
       dropzone.focus();
     }
 
@@ -253,6 +373,7 @@
         if (!jobRes.ok) throw await apiError(jobRes);
         var job = await jobRes.json();
         currentJobId = job.id;
+        saveJobToSession(job.id);
 
         listenForProgress(job.id);
       } catch (err) {
@@ -309,9 +430,16 @@
       setProgress(100, 'Done.');
       downloadBtn.href = output.downloadUrl;
       downloadBtn.setAttribute('download', output.filename || '');
-      resultTitle.textContent = (output.filename || 'Your file') + ' \u00b7 ' + formatBytes(output.sizeBytes);
+      resultTitle.textContent = output.filename || 'Your file';
+      var resultSub = document.getElementById('result-sub');
+      if (resultSub) {
+        resultSub.textContent = formatBytes(output.sizeBytes) + ' \u00b7 Ready to download';
+      }
       resultBox.hidden = false;
       convertBtn.disabled = false;
+      downloadBtn.focus();
+      clearFileFromDB();
+      clearJobFromSession();
       refreshQuota();
     }
 
@@ -319,6 +447,7 @@
       if (eventSource) { eventSource.close(); eventSource = null; }
       progressWrap.hidden = true;
       convertBtn.disabled = false;
+      clearJobFromSession();
       var msg = (state.error && state.error.message) || 'The conversion failed. Try a different file or format.';
       showError(msg);
       refreshQuota();
@@ -383,6 +512,29 @@
     convertBtn.addEventListener('click', startConversion);
 
     refreshQuota();
+
+    /* restore file from IndexedDB after reload */
+    var savedJobId = loadJobFromSession();
+    loadFileFromDB(function (record) {
+      if (!record || !record.blob || !record.meta) return;
+      var meta = record.meta;
+      var blob = record.blob;
+      var restoredFile;
+      try {
+        restoredFile = new File([blob], meta.name, { type: blob.type || 'application/octet-stream' });
+      } catch (e) { return; }
+      restoring = true;
+      acceptFile(restoredFile, meta.format);
+      restoring = false;
+
+      if (savedJobId) {
+        currentJobId = savedJobId;
+        clearError();
+        resultBox.hidden = true;
+        convertBtn.disabled = true;
+        listenForProgress(savedJobId);
+      }
+    });
   }
 
   /* ---------------------------------------------------------------- boot */

@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 
 {% block title %}Convert a file — {{ app_name }}{% endblock %}
-{% block description %}Upload a document, pick an output format and convert. Word, PDF, PowerPoint, Excel, images and more — with live progress and auto-deleting files.{% endblock %}
+{% block description %}Upload a document, pick an output format and convert. Word, PDF, PowerPoint, Excel, images, code files and more — with live progress and auto-deleting files.{% endblock %}
 
 {% block content %}
 <section class="section converter-section">
@@ -26,17 +26,35 @@
              aria-label="Choose or drop a file to convert"
              aria-describedby="dz-hint">
           <input id="file-input" type="file" hidden aria-label="Choose a file to convert">
-          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m17 8-5-5-5 5"/><path d="M12 3v12"/></svg>
+          <div class="dropzone-icon">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m17 8-5-5-5 5"/><path d="M12 3v12"/></svg>
+          </div>
           <p class="dropzone-title" id="dz-title"><strong>Click to choose</strong> or drag &amp; drop</p>
-          <p class="muted text-sm" id="dz-hint">Word, PDF, PowerPoint, Excel, CSV, RTF, EPUB, HTML, Markdown, text, images</p>
+          <p class="muted text-sm" id="dz-hint">Word, PDF, PowerPoint, Excel, CSV, RTF, EPUB, HTML, Markdown, text, images, code files and more</p>
+          <div class="dropzone-formats" aria-hidden="true">
+            <span class="format-tag">DOCX</span>
+            <span class="format-tag">PDF</span>
+            <span class="format-tag">PPTX</span>
+            <span class="format-tag">XLSX</span>
+            <span class="format-tag">PNG</span>
+            <span class="format-tag">JPG</span>
+            <span class="format-tag">+50 more</span>
+          </div>
         </div>
       </form>
 
       <div id="file-card" class="file-card" hidden>
-        <div class="file-meta">
-          <span id="file-name" class="file-name"></span>
-          <span id="file-size" class="muted text-sm"></span>
-          <span id="file-format" class="badge"></span>
+        <div class="file-info">
+          <div class="file-icon" id="file-icon" aria-hidden="true">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+          </div>
+          <div class="file-meta">
+            <span id="file-name" class="file-name"></span>
+            <div class="file-details">
+              <span id="file-size" class="muted text-sm"></span>
+              <span id="file-format" class="badge"></span>
+            </div>
+          </div>
         </div>
         <button id="remove-file" class="icon-btn" type="button" aria-label="Remove selected file">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
@@ -44,9 +62,15 @@
       </div>
 
       <div id="target-row" class="target-row" hidden>
-        <label class="label" for="target-select">Convert to</label>
-        <select id="target-select" class="select"></select>
-        <button id="convert-btn" class="btn btn-primary btn-lg" type="button">Convert</button>
+        <div class="target-select-wrap">
+          <label class="label" for="target-select">Convert to</label>
+          <select id="target-select" class="select" aria-describedby="target-help"></select>
+          <span id="target-help" class="sr-only">Select the output format for your conversion</span>
+        </div>
+        <button id="convert-btn" class="btn btn-primary btn-lg convert-btn" type="button">
+          <span class="btn-text">Convert</span>
+          <svg class="btn-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+        </button>
       </div>
 
       <div id="progress-wrap" class="progress-wrap" hidden aria-live="polite">
@@ -58,16 +82,41 @@
              aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="progress-bar">
           <div class="progress-fill" id="progress-fill"></div>
         </div>
+        <div class="progress-steps" aria-hidden="true">
+          <div class="progress-step active" data-step="upload">
+            <div class="step-dot"></div>
+            <span>Upload</span>
+          </div>
+          <div class="progress-step" data-step="process">
+            <div class="step-dot"></div>
+            <span>Process</span>
+          </div>
+          <div class="progress-step" data-step="complete">
+            <div class="step-dot"></div>
+            <span>Complete</span>
+          </div>
+        </div>
       </div>
 
       <div id="result" class="result" hidden aria-live="polite">
-        <p class="result-title" id="result-title"></p>
-        <a id="download-btn" class="btn btn-primary btn-lg" href="#" download>Download file</a>
+        <div class="result-info">
+          <div class="result-icon" aria-hidden="true">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+          </div>
+          <div class="result-details">
+            <p class="result-title" id="result-title"></p>
+            <p class="result-sub muted text-sm" id="result-sub"></p>
+          </div>
+        </div>
+        <a id="download-btn" class="btn btn-primary btn-lg" href="#" download>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Download
+        </a>
       </div>
 
       <div id="error-box" class="notice notice-error" role="alert" hidden></div>
 
-      <p id="quota-note" class="muted text-sm quota-note"></p>
+      <p id="quota-note" class="muted text-sm quota-note" aria-live="polite"></p>
     </div>
   </div>
 </section>
@@ -78,7 +127,7 @@
     <ul class="know-list muted">
       <li>Guests get {{ anon_limit }} free conversions per day — failed jobs never count against you.</li>
       <li>Files are removed from the server shortly after conversion.</li>
-      <li>Browser-only tools (merge, split, rotate, watermark) are coming soon.</li>
+      <li>Browser-only tools (merge, split, rotate, watermark) run entirely in your browser.</li>
     </ul>
   </div>
 </section>

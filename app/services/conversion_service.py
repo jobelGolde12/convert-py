@@ -54,6 +54,8 @@ def convert_with_soffice(
         "--norestore",
         "--nolockcheck",
         "--nodefault",
+        "--nologo",
+        "--nofirststartwizard",
         f"-env:UserInstallation=file://{profile_dir}",
         "--convert-to",
         filter_name,

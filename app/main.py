@@ -95,9 +95,9 @@ class SmartGzipMiddleware:
 class CachedStaticFiles(StaticFiles):
     """StaticFiles with a Cache-Control header for repeat-visit performance."""
 
-    def __init__(self, *args: object, cache_max_age: int = 3600, **kwargs: object) -> None:
+    def __init__(self, *args: object, cache_max_age: int = 31536000, **kwargs: object) -> None:
         super().__init__(*args, **kwargs)  # type: ignore[arg-type]
-        self.cache_header = f"public, max-age={cache_max_age}"
+        self.cache_header = f"public, max-age={cache_max_age}, immutable"
 
     async def get_response(self, path: str, scope: Scope):  # type: ignore[override]
         response = await super().get_response(path, scope)
@@ -176,9 +176,21 @@ def create_app() -> FastAPI:
         response.headers.setdefault(
             "Permissions-Policy", "camera=(), microphone=(), geolocation=()"
         )
+        response.headers.setdefault(
+            "Content-Security-Policy",
+            "default-src 'self'; "
+            "script-src 'self' 'unsafe-inline'; "
+            "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+            "font-src 'self' https://fonts.gstatic.com; "
+            "img-src 'self' data: blob:; "
+            "connect-src 'self'; "
+            "frame-ancestors 'none'; "
+            "base-uri 'self'; "
+            "form-action 'self'"
+        )
         if settings.is_prod:
             response.headers.setdefault(
-                "Strict-Transport-Security", "max-age=31536000; includeSubDomains"
+                "Strict-Transport-Security", "max-age=31536000; includeSubDomains; preload"
             )
         return response
 
@@ -250,15 +262,21 @@ def create_app() -> FastAPI:
     @application.get("/sitemap.xml")
     def sitemap_xml():
         base = settings.app_url.rstrip("/")
-        pages = [("", "1.0"), ("/convert", "0.9"), ("/privacy", "0.3"), ("/terms", "0.3")]
+        now = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        pages = [
+            ("", "1.0", now),
+            ("/convert", "0.9", now),
+            ("/privacy", "0.3", now),
+            ("/terms", "0.3", now),
+        ]
         entries = "\n".join(
-            f"  <url><loc>{base}{path}</loc><priority>{priority}</priority></url>"
-            for path, priority in pages
+            f'  <url><loc>{base}{path}</loc><lastmod>{lastmod}</lastmod><priority>{priority}</priority></url>'
+            for path, priority, lastmod in pages
         )
         xml = (
             '<?xml version="1.0" encoding="UTF-8"?>\n'
             '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
-            f"{entries}\n</urlset>\n"
+            f"{entries}\n</urlset>"
         )
         return Response(content=xml, media_type="application/xml")
 

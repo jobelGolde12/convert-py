@@ -12,9 +12,13 @@
   <meta property="og:title" content="{% block og_title %}{{ self.title() }}{% endblock %}">
   <meta property="og:description" content="{{ self.description() }}">
   <meta property="og:url" content="{{ app_url }}{{ request.url.path }}">
+  <meta property="og:image" content="{{ app_url }}/static/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="{{ self.og_title() }}">
   <meta name="twitter:description" content="{{ self.description() }}">
+  <meta name="twitter:image" content="{{ app_url }}/static/og-image.png">
   <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
   <meta name="theme-color" content="#0a0a0a" media="(prefers-color-scheme: dark)">
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
@@ -50,9 +54,9 @@
 </head>
 <body>
   <a href="#main" class="skip-link">Skip to content</a>
-  <header class="site-header">
+  <header class="site-header" role="banner">
     <div class="container header-inner">
-      <a class="brand" href="/" aria-label="Convert — home">Convert<span class="brand-dot" aria-hidden="true"></span></a>
+      <a class="brand" href="/" aria-label="{{ app_name }} — home">Convert<span class="brand-dot" aria-hidden="true"></span></a>
 
       <nav class="nav" aria-label="Primary">
         <a class="nav-link" href="/convert">Convert</a>
@@ -83,15 +87,15 @@
     </div>
   </header>
 
-  <main id="main" class="main">
+  <main id="main" class="main" role="main">
     {% block content %}{% endblock %}
   </main>
 
-  <footer class="site-footer">
+  <footer class="site-footer" role="contentinfo">
     <div class="container footer-grid">
       <div>
         <div class="brand">Convert<span class="brand-dot" aria-hidden="true"></span></div>
-        <p class="muted text-sm">Editorial document conversion. FastAPI + LibreOffice under the hood.</p>
+        <p class="muted text-sm">Privacy-first document conversion. FastAPI + LibreOffice under the hood.</p>
       </div>
       <div>
         <div class="label">Product</div>
@@ -106,7 +110,7 @@
       </div>
     </div>
     <div class="container footer-bottom">
-      <span class="muted text-xs">&copy; {{ now_year }} Convert. Files auto-delete; nothing is shared.</span>
+      <span class="muted text-xs">&copy; {{ now_year }} {{ app_name }}. Files auto-delete; nothing is shared.</span>
     </div>
   </footer>
 
