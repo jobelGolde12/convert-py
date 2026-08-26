@@ -124,7 +124,10 @@ def _template_context(request: Request, **extra: object) -> dict[str, object]:
 async def lifespan(application: FastAPI):
     if settings.is_prod:
         _validate_production_secrets()
-    init_db()
+    try:
+        init_db()
+    except Exception:
+        logger.warning("Database initialization failed; some features may be unavailable.", exc_info=True)
     yield
 
 

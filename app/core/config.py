@@ -24,7 +24,7 @@ class Settings(BaseSettings):
     turso_auth_token: str = ""
 
     # Local SQLite fallback (only used when TURSO_DATABASE_URL is empty)
-    database_url: str = "sqlite:///./dev.db"
+    database_url: str = f"sqlite:///{os.getenv('TMPDIR', '/tmp')}/dev.db"
 
     redis_url: str = "redis://127.0.0.1:6379"
 
