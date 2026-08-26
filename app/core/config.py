@@ -19,12 +19,14 @@ class Settings(BaseSettings):
 
     cors_origins: list[str] = []
 
-    database_url: str = "sqlite:///./dev.db"
-    redis_url: str = "redis://127.0.0.1:6379"
-
-    # Turso / libSQL (optional — falls back to local SQLite when unset)
+    # Turso / libSQL — primary database
     turso_database_url: str = ""
     turso_auth_token: str = ""
+
+    # Local SQLite fallback (only used when TURSO_DATABASE_URL is empty)
+    database_url: str = "sqlite:///./dev.db"
+
+    redis_url: str = "redis://127.0.0.1:6379"
 
     retention_anon_hours: int = 1
 
@@ -51,6 +53,10 @@ class Settings(BaseSettings):
     @property
     def is_prod(self) -> bool:
         return self.env == "production"
+
+    @property
+    def use_turso(self) -> bool:
+        return bool(self.turso_database_url and self.turso_auth_token)
 
 
 @lru_cache

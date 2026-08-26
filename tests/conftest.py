@@ -9,6 +9,9 @@ os.environ["DATABASE_URL"] = f"sqlite:///{_TMP}/test.db"
 os.environ["LOCAL_STORAGE_ROOT"] = os.path.join(_TMP, "storage")
 os.environ["REDIS_URL"] = "redis://127.0.0.1:1"  # unreachable -> memory fallback
 os.environ["ENV"] = "development"
+# Force tests to use local SQLite, never Turso
+os.environ["TURSO_DATABASE_URL"] = ""
+os.environ["TURSO_AUTH_TOKEN"] = ""
 
 import pytest
 from fastapi.testclient import TestClient
