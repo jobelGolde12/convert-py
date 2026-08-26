@@ -20,7 +20,7 @@
       </div>
     </noscript>
 
-    <div id="converter" class="converter" data-catalog="{{ catalog_json }}">
+    <div id="converter" class="converter">
       <form id="convert-form" novalidate>
         <div id="dropzone" class="dropzone" tabindex="0" role="button"
              aria-label="Choose or drop a file to convert"
@@ -85,5 +85,6 @@
 {% endblock %}
 
 {% block scripts %}
+<script>window.__CATALOG__ = {{ catalog_json | safe }};</script>
 <script>window.__ANON_LIMIT__ = {{ anon_limit }};</script>
 {% endblock %}

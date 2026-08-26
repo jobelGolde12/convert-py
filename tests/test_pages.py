@@ -18,13 +18,13 @@ class TestPages:
     def test_convert_page_embeds_catalog(self, client):
         r = client.get("/convert")
         assert r.status_code == 200
-        assert "data-catalog" in r.text
+        assert "window.__CATALOG__" in r.text
         assert "Word to PDF" in r.text
         # catalog must expose "from" (not the pydantic field name "from_");
-        # attribute values are HTML-entity escaped in the rendered page.
-        catalog_attr = r.text.split("data-catalog")[1][:6000]
-        assert "from_" not in catalog_attr
-        assert "&#34;from&#34;" in catalog_attr
+        # inside a <script> tag with | safe, JSON uses real double quotes.
+        catalog_section = r.text.split("window.__CATALOG__")[1][:6000]
+        assert "from_" not in catalog_section
+        assert '"from"' in catalog_section
 
     def test_privacy_page(self, client):
         r = client.get("/privacy")

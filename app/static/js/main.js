@@ -92,12 +92,7 @@
     var rootEl = $('converter');
     if (!rootEl) return;
 
-    var CATALOG;
-    try {
-      CATALOG = JSON.parse(rootEl.dataset.catalog || '[]');
-    } catch (err) {
-      CATALOG = [];
-    }
+    var CATALOG = window.__CATALOG__ || [];
     var ANON_LIMIT = window.__ANON_LIMIT__ || null;
 
     var EXT_TO_FORMAT = {};
