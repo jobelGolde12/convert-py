@@ -107,12 +107,18 @@ def _attach_pragmas(engine):
             pass
 
 
-engine = _make_engine()
+try:
+    engine = _make_engine()
+except Exception:
+    logger.warning("Database engine creation failed at startup; will retry on first use.", exc_info=True)
+    engine = None  # type: ignore[assignment]
 
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine) if engine else None  # type: ignore[arg-type]
 
 
 def get_db() -> Generator[Session, None, None]:
+    if SessionLocal is None:
+        raise RuntimeError("Database not initialised — no engine available.")
     db = SessionLocal()
     try:
         yield db
@@ -122,6 +128,8 @@ def get_db() -> Generator[Session, None, None]:
 
 @contextmanager
 def session_scope() -> Generator[Session, None, None]:
+    if SessionLocal is None:
+        raise RuntimeError("Database not initialised — no engine available.")
     session = SessionLocal()
     try:
         yield session
@@ -135,6 +143,17 @@ def session_scope() -> Generator[Session, None, None]:
 
 def init_db() -> None:
     """Create all tables. Import models so they register on Base."""
+    global engine, SessionLocal
+
+    # If engine failed at import, retry now.
+    if engine is None:
+        try:
+            engine = _make_engine()
+            SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+        except Exception:
+            logger.error("Database engine creation failed; API routes will be unavailable.", exc_info=True)
+            return
+
     from app.models import models  # noqa: F401
 
     models.Base.metadata.create_all(bind=engine)
