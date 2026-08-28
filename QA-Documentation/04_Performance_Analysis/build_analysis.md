@@ -2,32 +2,38 @@
 
 ## Build Command
 
-No traditional build step required. The application uses:
-- Raw CSS served from `/static/css/styles.css` (no preprocessor)
-- Raw JavaScript from `/static/js/main.js` (no bundler)
-- Python package built via Hatchling
+```bash
+python -m build  # or: pip install -e .
+```
 
-## Static Asset Sizes
+## Build Result
 
-| Asset | Size | Notes |
-|-------|------|-------|
-| styles.css | ~19.5 KB | Single CSS file with design system |
-| main.js | ~13.6 KB | Single JS file with theme, nav, converter |
-| Total client JS | ~13.6 KB | No framework overhead |
-| Total client CSS | ~19.5 KB | No framework overhead |
+**Status:** PASS
+
+## Build Configuration
+
+| Item | Value |
+|------|-------|
+| Build Backend | hatchling |
+| Python Required | >=3.11 |
+| Package Manager | pip |
+| Packages | `app`, `api` |
 
 ## Observations
 
-- **No build step**: Eliminates build failures, reduces deployment complexity
-- **Small payload**: Combined CSS + JS is ~33 KB uncompressed
-- **Gzip compression**: SmartGzipMiddleware compresses text responses >=1KB
-- **Cache headers**: Static files served with `Cache-Control: public, max-age=3600`
-- **Google Fonts**: Inter loaded from Google Fonts CDN (external dependency)
-- **No TypeScript**: Vanilla JS; type safety not applicable
-- **No bundling**: Each file served individually; no tree-shaking needed
+- No build errors or warnings detected during `pip install -e .`.
+- Dependencies install cleanly.
+- `hatchling` build system correctly locates packages.
+- No TypeScript compilation (Python-only project).
+- No frontend build step (vanilla JS, no bundler).
 
-## Deployment Concerns
+## Warnings
 
-- Docker image includes LibreOffice (~300MB+), making it large
-- SQLite used for development; production should use PostgreSQL
-- Alembic migrations scaffolded but not generated yet
+- `ruff` and `mypy` are pinned to exact versions in dev requirements, which may conflict with newer Python versions.
+- `httpx==0.27.0` is pinned for TestClient compatibility; may need updating if FastAPI bumps its httpx requirement.
+
+## Deployment
+
+- Vercel deployment configured via `vercel.json`.
+- SQLite fallback to `/tmp/dev.db` for serverless.
+- `init_db()` failure is non-fatal in development, fatal in production.

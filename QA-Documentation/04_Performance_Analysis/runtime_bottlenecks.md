@@ -1,59 +1,90 @@
-# Runtime Performance Bottlenecks
+# Runtime Bottlenecks
 
-## SSE Polling Interval
+## N+1 Queries
 
-- **File**: `app/api/routes/jobs.py:223`
-- **Issue**: SSE event generator polls database every 0.6 seconds
-- **Impact**: Low — reasonable for real-time progress updates; not a bottleneck
-- **Status**: Acceptable
+| Location | Issue | Status |
+|----------|-------|--------|
+| `get_job_for_api()` | Lazy loading of tasks and output files | FIXED — uses `selectinload` |
+| `list_jobs()` | Lazy loading of tasks per job | FIXED — uses `selectinload` |
 
-## LibreOffice Conversion Time
+## Missing Indexes
 
-- **File**: `app/services/conversion_service.py:36-95`
-- **Issue**: LibreOffice conversions can take 10-15 minutes for large files
-- **Impact**: Expected behavior; timeout is configurable (default 15 minutes)
-- **Status**: By design
+| Table | Column | Status |
+|-------|--------|--------|
+| `jobs` | `guest_id`, `created_at` | Indexed — `idx_jobs_guest_created` |
+| `jobs` | `status`, `created_at` | Indexed — `idx_jobs_status_created` |
+| `tasks` | `job_id` | Indexed — `idx_tasks_job` |
+| `tasks` | `status`, `created_at` | Indexed — `idx_tasks_status_created` |
+| `tasks` | `input_file_id` | Indexed — `idx_tasks_input` |
+| `files` | `status`, `retention_until` | Indexed — `idx_files_status_retention` |
+| `files` | `checksum_sha256` | Indexed — `idx_files_checksum` |
 
-## Database Query Optimization
+All critical query patterns have appropriate indexes.
 
-- **File**: `app/api/routes/jobs.py:106-125`
-- **Issue**: Job listing uses `selectinload` to avoid N+1 queries
-- **Impact**: Good — properly optimized
-- **Status**: Well implemented
+## Caching
 
-- **File**: `app/services/job_service.py:335-340`
-- **Issue**: `get_job_for_api` uses `selectinload` with nested `selectinload(Task.output)` to avoid N+1
-- **Impact**: Good — properly optimized
-- **Status**: Well implemented
+| Asset | Strategy | Status |
+|-------|----------|--------|
+| Static files | `Cache-Control: public, max-age=31536000, immutable` | Implemented |
+| Conversion catalog | Pre-computed at startup, not per-request | Implemented |
+| Template context | Computed once per request | Adequate |
 
-## In-Memory Rate Limiting Fallback
+## Compression
 
-- **File**: `app/services/quota_service.py:11-33`
-- **Issue**: In-memory rate limiting stores timestamps in a deque; no upper bound on memory
-- **Impact**: Low — deques are pruned by time window; memory usage is bounded by request rate
-- **Status**: Acceptable for current scale
+| Item | Status |
+|------|--------|
+| Gzip middleware | Implemented — `SmartGzipMiddleware` skips SSE streams |
+| Minimum size threshold | 1024 bytes |
+| Compressed types | JSON, HTML, plain text, CSS, JS, XML |
 
-## File Storage
+## Background Processing
 
-- **File**: `app/services/storage_service.py`
-- **Issue**: LocalStorage reads entire file into memory for `get_bytes`
-- **Impact**: Medium — large files (100MB+) could cause memory pressure
-- **Mitigation**: Streaming download uses `iter_bytes` with 64KB chunks
-- **Status**: Acceptable; streaming path is used for downloads
+| Item | Status |
+|------|--------|
+| Conversion jobs | Run in `BackgroundTasks`, non-blocking |
+| SSE events | Streaming via `StreamingResponse`, no buffering |
+| File downloads | Chunked streaming via `iter_bytes()` |
 
-## Gzip Middleware
+## Database
 
-- **File**: `app/main.py:32-90`
-- **Issue**: Custom SmartGzipMiddleware buffers entire response for compression
-- **Impact**: Low — only applied to non-streaming responses with Content-Length
-- **Status**: Well implemented
+| Item | Status |
+|------|--------|
+| WAL mode | Enabled via pragma |
+| Busy timeout | 5000ms |
+| Connection pooling | SQLAlchemy default pool |
+| Pool pre-ping | Enabled |
+| SQL echo | Development only |
 
-## No Identified N+1 Queries
+## Identified Issues
 
-All database queries use `selectinload` or direct `db.get()` for related objects. No N+1 query patterns detected.
+### PERF-001: LibreOffice profile directories accumulate
 
-## No Identified Memory Leaks
+```
+Location: app/services/conversion_service.py — convert_with_soffice()
+Issue: Profile directories under /tmp/lo-profiles/ are never cleaned up.
+Impact: Disk space consumption over time (minor in serverless, moderate in long-running servers).
+Recommended Fix: Clean up profile directory in process_office_job's finally block.
+Priority: Low
+```
 
-- Temporary files created during conversion are cleaned up in `finally` blocks
-- Redis client is lazily initialized and cached
-- Database sessions are properly closed in context managers
+### PERF-002: New R2Storage instance per request
+
+```
+Location: app/services/storage_service.py — get_storage()
+Issue: get_storage() creates a new R2Storage (and boto3 client) on every call.
+Impact: boto3 client initialization overhead on each storage operation.
+Recommended Fix: Cache the storage instance at module level or use lru_cache.
+Priority: Low (not relevant in local storage mode, only R2)
+```
+
+## Overall Assessment
+
+The application has good performance characteristics:
+- Eager loading prevents N+1 queries
+- Static assets are aggressively cached
+- Background tasks keep the API responsive
+- Gzip compression is applied appropriately
+- Database pragmas are optimized for concurrent access
+- The conversion catalog is pre-computed
+
+No critical performance bottlenecks identified.

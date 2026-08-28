@@ -96,10 +96,18 @@ class R2Storage:
         yield from body.iter_chunks(chunk_size)
 
 
+_storage_instance: LocalStorage | R2Storage | None = None
+
+
 def get_storage() -> LocalStorage | R2Storage:
+    global _storage_instance
+    if _storage_instance is not None:
+        return _storage_instance
     if settings.storage_backend == "r2":
-        return R2Storage()
-    return LocalStorage(settings.local_storage_root)
+        _storage_instance = R2Storage()
+    else:
+        _storage_instance = LocalStorage(settings.local_storage_root)
+    return _storage_instance
 
 
 StorageBackend = LocalStorage | R2Storage

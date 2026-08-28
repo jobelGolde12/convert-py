@@ -2,71 +2,67 @@
 
 ## Operating Environment
 
-- OS: Linux (Ubuntu-based)
-- Python: 3.12.3
-- Virtual Environment: venv/ (project-local)
-
-## Package Manager
-
-- pip (standard Python package manager)
-- Dependencies managed via `requirements.txt` and `requirements-dev.txt`
-- Build system: Hatchling (pyproject.toml)
+| Item | Value |
+|------|-------|
+| OS | Linux |
+| Python | 3.12 |
+| Package Manager | pip (with venv) |
+| Virtual Environment | `venv/` |
 
 ## Dependency Installation
 
 ```bash
-python3 -m venv venv
+python -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
 pip install -r requirements-dev.txt
 ```
 
-## Development Server
+## Environment Variables (from `.env.example`)
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `APP_NAME` | No | Application display name |
+| `APP_URL` | No | Base URL for canonical links and sitemap |
+| `ENV` | No | `development`, `staging`, or `production` |
+| `SECRET_KEY` | Yes (prod) | HMAC signing key for cookies |
+| `UPLOAD_SECRET` | Yes (prod) | Upload authentication secret |
+| `TURSO_DATABASE_URL` | No | Turso/libSQL database URL |
+| `TURSO_AUTH_TOKEN` | No | Turso authentication token |
+| `DATABASE_URL` | No | Local SQLite fallback URL |
+| `REDIS_URL` | No | Redis connection URL |
+| `RETENTION_ANON_HOURS` | No | File retention period (hours) |
+| `ANON_CONVERSIONS_PER_DAY` | No | Daily conversion limit per guest |
+| `ANON_REQ_PER_MIN` | No | Rate limit per minute |
+| `LO_CONCURRENCY` | No | LibreOffice concurrency limit |
+| `LO_TIMEOUT_MS` | No | LibreOffice timeout (ms) |
+| `LO_PROFILE_ROOT` | No | LibreOffice profile directory |
+| `R2_ACCOUNT_ID` | No | Cloudflare R2 account ID |
+| `R2_ACCESS_KEY_ID` | No | R2 access key |
+| `R2_SECRET_ACCESS_KEY` | No | R2 secret key |
+| `R2_BUCKET` | No | R2 bucket name |
+| `R2_PUBLIC_URL` | No | R2 public URL |
+| `STORAGE_BACKEND` | No | `local`, `r2`, or `s3` |
+| `LOCAL_STORAGE_ROOT` | No | Local file storage path |
+| `CORS_ORIGINS` | No | Allowed CORS origins (JSON list) |
+
+## Test Configuration
+
+Tests automatically configure isolated environment:
+- SQLite database in temp directory
+- Local file storage in temp directory
+- Redis mocked to unreachable (triggers in-memory fallback)
+- In-memory rate limit and quota stores reset between tests
+- Database tables truncated between tests via `_isolated_db` fixture
+
+## Running Tests
 
 ```bash
-uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+./venv/bin/python -m pytest tests/ -v
 ```
 
-## Build Process
-
-No frontend build step required. Static CSS and JS served directly.
-
-## Database Setup
-
-SQLite database created automatically on first run via `init_db()`.
-Alembic is scaffolded but no migration files exist yet.
-
-## Test Execution
+## Running Lint
 
 ```bash
-pytest tests/ -v          # Run all tests
-ruff check app tests      # Lint
+./venv/bin/python -m ruff check app tests
 ```
-
-## Environment Variable Names (from .env.example)
-
-| Variable | Purpose | Required |
-|----------|---------|----------|
-| APP_NAME | Application display name | No (has default) |
-| APP_URL | Public URL | No (has default) |
-| ENV | Environment (development/staging/production) | No (has default) |
-| SECRET_KEY | Secret pepper for identity hashing | Yes |
-| UPLOAD_SECRET | HMAC signing secret for uploads | Yes |
-| DATABASE_URL | SQLAlchemy database URL | No (has default) |
-| REDIS_URL | Redis connection URL | No (has default) |
-| RETENTION_ANON_HOURS | File retention for anonymous users | No |
-| RETENTION_FREE_HOURS | File retention for free users | No |
-| RETENTION_PAID_HOURS | File retention for paid users | No |
-| ANON_CONVERSIONS_PER_DAY | Daily conversion limit | No |
-| ANON_REQ_PER_MIN | Per-minute rate limit | No |
-| LO_CONCURRENCY | LibreOffice concurrency | No |
-| LO_TIMEOUT_MS | LibreOffice timeout | No |
-| LO_PROFILE_ROOT | LibreOffice profile directory | No |
-| R2_ACCOUNT_ID | Cloudflare R2 account ID | No |
-| R2_ACCESS_KEY_ID | R2 access key | No |
-| R2_SECRET_ACCESS_KEY | R2 secret key | No |
-| R2_BUCKET | R2 bucket name | No |
-| R2_PUBLIC_URL | R2 public URL | No |
-| CORS_ORIGINS | Allowed CORS origins (JSON list) | No |
-
-**Note:** Secret values are never documented. Only variable names are listed.

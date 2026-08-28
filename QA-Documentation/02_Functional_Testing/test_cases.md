@@ -1,55 +1,49 @@
 # Functional Test Cases
 
-## Page Rendering
-
 | Test ID | Feature | Description | Preconditions | Steps | Expected Result | Priority |
 |---------|---------|-------------|---------------|-------|-----------------|----------|
-| TC-PAGE-001 | Home page | Home page renders with correct content | None | GET / | 200, HTML content-type, contains "Convert", has canonical link, OG tags, JSON-LD, accessibility landmarks | High |
-| TC-PAGE-002 | Convert page | Convert page renders with catalog | None | GET /convert | 200, contains data-catalog attribute, conversion options visible | High |
-| TC-PAGE-003 | Privacy page | Privacy page renders | None | GET /privacy | 200, contains "Privacy" | Medium |
-| TC-PAGE-004 | Terms page | Terms page renders | None | GET /terms | 200, contains "Terms of use" | Medium |
-| TC-PAGE-005 | 404 page | Unknown page returns custom 404 | None | GET /nonexistent | 404, HTML content-type, contains "404" | Medium |
-| TC-PAGE-006 | Health check | Health endpoint returns OK | None | GET /healthz | 200, {"status": "ok"} | High |
-| TC-PAGE-007 | Robots.txt | Robots.txt is served | None | GET /robots.txt | 200, text/plain, contains "Disallow: /api/" | Low |
-| TC-PAGE-008 | Sitemap | Sitemap XML is valid | None | GET /sitemap.xml | 200, application/xml, contains urlset | Low |
-| TC-PAGE-009 | Favicon | Favicon SVG is served | None | GET /static/favicon.svg | 200, image/svg+xml | Low |
-| TC-PAGE-010 | Security headers | Security headers present | None | GET / | X-Content-Type-Options: nosniff, X-Frame-Options: DENY, Referrer-Policy set | High |
-
-## File Upload
-
-| Test ID | Feature | Description | Preconditions | Steps | Expected Result | Priority |
-|---------|---------|-------------|---------------|-------|-----------------|----------|
-| TC-UPLOAD-001 | Valid upload | Upload a valid markdown file | None | POST /api/v1/files/upload with file | 200, fileId, filename, sizeBytes, status="ready" | High |
-| TC-UPLOAD-002 | Download roundtrip | Download matches uploaded content | File uploaded | GET /api/v1/files/{id}/download | 200, content matches, Content-Disposition set | High |
-| TC-UPLOAD-003 | Unsupported type | Reject unsupported file types | None | POST with .exe file | 415 | High |
-| TC-UPLOAD-004 | No file | Reject empty upload | None | POST without file | 422 | High |
-| TC-UPLOAD-005 | Oversize file | Reject files exceeding format limit | None | Upload 11MB .md file (limit 10MB) | 413, maxSizeMB in response | High |
-| TC-UPLOAD-006 | Missing file ID | Return 404 for nonexistent file | None | GET /api/v1/files/nonexistent | 404 | High |
-| TC-UPLOAD-007 | Content-Disposition | Sanitize filename in header | None | Upload file with special chars | No CRLF injection, proper RFC 5987 encoding | High |
-
-## Job Management
-
-| Test ID | Feature | Description | Preconditions | Steps | Expected Result | Priority |
-|---------|---------|-------------|---------------|-------|-----------------|----------|
-| TC-JOB-001 | Missing input | Reject job with missing input file | None | POST with nonexistent input | 404 | High |
-| TC-JOB-002 | Client-only rejection | Reject client-only conversions via API | PDF uploaded | POST with pdf→pdf conversion | 422, mentions "browser" | High |
-| TC-JOB-003 | Invalid body | Reject malformed job body | None | POST with invalid JSON | 422 | High |
-| TC-JOB-004 | Cancel missing | Return 404 for nonexistent job cancel | None | POST /api/v1/jobs/ghost/cancel | 404 | Medium |
-| TC-JOB-005 | Empty job list | Return empty list for new guest | None | GET /api/v1/jobs/ | 200, empty jobs array | Medium |
-| TC-JOB-006 | E2E conversion | Full markdown to PDF conversion | LibreOffice installed | Upload .md, create job, poll status, download | 200, status=done, progress=100, valid PDF output | High |
-
-## Rate Limiting & Quota
-
-| Test ID | Feature | Description | Preconditions | Steps | Expected Result | Priority |
-|---------|---------|-------------|---------------|-------|-----------------|----------|
-| TC-RL-001 | Quota shape | Quota endpoint returns correct structure | None | GET /api/v1/quota | 200, limit=5, remaining=5, resetsAt | High |
-| TC-RL-002 | Cookie security | Guest cookie has security flags | None | GET /api/v1/quota | Set-Cookie: HttpOnly, SameSite=lax | High |
-| TC-RL-003 | Rate limit | Rate limit enforced on API | Set limit to 3 | POST /api/v1/jobs/ 5 times | 429 appears in responses | High |
-
-## Navigation & UI
-
-| Test ID | Feature | Description | Preconditions | Steps | Expected Result | Priority |
-|---------|---------|-------------|---------------|-------|-----------------|----------|
-| TC-UI-001 | Theme toggle | Dark mode toggle present | None | Check HTML | id="theme-toggle" present | Medium |
-| TC-UI-002 | Mobile nav | Mobile navigation present | None | Check HTML | id="menu-toggle", id="mobile-nav" present | Medium |
-| TC-UI-003 | Skip link | Skip to content link present | None | Check HTML | "Skip to content" link present | Medium |
+| TC-001 | Upload | Upload valid file | None | POST /api/v1/files/upload with valid file | 200, fileId returned | High |
+| TC-002 | Upload | Upload with no extension | None | Upload file with no extension | 415 Unsupported | High |
+| TC-003 | Upload | Upload empty file | None | Upload 0-byte file | 200, sizeBytes=0 | Medium |
+| TC-004 | Upload | Upload oversized file | None | Upload file exceeding format limit | 413 File too large | High |
+| TC-005 | Upload | Upload unicode filename | None | Upload with non-ASCII filename | 200, RFC5987 header | Medium |
+| TC-006 | Upload | Upload various formats | None | Upload docx, xlsx, pptx, csv files | 200 for each | High |
+| TC-007 | Upload | Upload HTML format | None | Upload .html file | 200 | Medium |
+| TC-008 | Upload | Upload TXT format | None | Upload .txt file | 200 | Medium |
+| TC-009 | Download | Download existing file | File uploaded | GET /api/v1/files/{id}/download | 200, correct content | High |
+| TC-010 | Download | Download missing file | None | GET /api/v1/files/nonexistent/download | 404 | High |
+| TC-011 | Download | Security headers on download | File uploaded | Check response headers | X-Content-Type-Options: nosniff | High |
+| TC-012 | Quota | Check quota | None | GET /api/v1/quota | 200, used/limit/remaining/resetsAt | High |
+| TC-013 | Quota | Quota decrements after upload | None | Upload file, check quota | remaining decreases by 1 | High |
+| TC-014 | Quota | Quota exceeded returns 402 | Set limit=1 | Upload 2 files | Second returns 402 QUOTA_EXCEEDED | High |
+| TC-015 | Quota | resetsAt is tomorrow | None | GET /api/v1/quota | resetsAt contains T (ISO format) | Low |
+| TC-016 | Rate Limit | Rate limit headers on 429 | Set limit=1 | Make 2 requests quickly | 429 with Retry-After: 60 | High |
+| TC-017 | Rate Limit | Cookie tamper generates new identity | None | Set tampered cookie, make request | New valid cookie issued | High |
+| TC-018 | Rate Limit | Valid cookie preserved | None | Make 2 requests with same cookie | Identity reused, quota consistent | Medium |
+| TC-019 | Jobs | Create job returns conversion info | File uploaded | POST /api/v1/jobs/ | 200, status=queued, conversion object | High |
+| TC-020 | Jobs | Create job unsupported conversion | File uploaded | POST with invalid outputFormat | 422 | High |
+| TC-021 | Jobs | Create job wrong operation | File uploaded | POST with operation=merge | 422 | High |
+| TC-022 | Jobs | Create job empty tasks | None | POST with empty tasks array | 422 | High |
+| TC-023 | Jobs | Get job after create | Job created | GET /api/v1/jobs/{id} | 200, correct job data | High |
+| TC-024 | Jobs | Get job not found | None | GET /api/v1/jobs/nonexistent | 404 | High |
+| TC-025 | Jobs | Job ownership isolation | Job created by guest A | Guest B queries job | 404 | High |
+| TC-026 | Jobs | Cancel queued job | Job queued | POST /api/v1/jobs/{id}/cancel | 200, cancelled=True | High |
+| TC-027 | Jobs | Cancel already cancelled | Job cancelled | POST cancel again | 200, cancelled=False | Medium |
+| TC-028 | Jobs | Cancel missing job | None | POST /api/v1/jobs/ghost/cancel | 404 | High |
+| TC-029 | Jobs | Cancel other guest's job | Job exists | Different guest cancels | 404 | High |
+| TC-030 | Jobs | List returns created jobs | Jobs created | GET /api/v1/jobs/ | 200, jobs array | High |
+| TC-031 | Jobs | List pagination with limit | 3 jobs, limit=2 | GET with limit=2, then next page | Page 1: 2 jobs, Page 2: 1 job | High |
+| TC-032 | Jobs | List limit clamped | None | GET with limit=9999 | 200, capped at 50 | Medium |
+| TC-033 | Jobs | List invalid cursor | None | GET with cursor=garbage | 200, no crash | Medium |
+| TC-034 | Jobs | List isolation per guest | 2 guests with jobs | Each lists own jobs | Only own jobs returned | High |
+| TC-035 | Jobs | SSE events returns stream | Job exists, cancelled | GET /api/v1/jobs/{id}/events | 200, text/event-stream | High |
+| TC-036 | Jobs | SSE missing job 404 | None | GET /api/v1/jobs/ghost/events | 404 | Medium |
+| TC-037 | Formats | Formats returns all conversions | None | GET /api/v1/formats | 200, conversions + formats | High |
+| TC-038 | Formats | Server and client locations present | None | GET /api/v1/formats | Both "server" and "client" in locations | Medium |
+| TC-039 | Security | CORS headers | None | GET / with Origin header | No allow-origin for unknown origin | High |
+| TC-040 | Security | Request ID header | None | GET / | X-Request-ID present | Medium |
+| TC-041 | Security | Custom request ID propagated | None | GET / with X-Request-ID header | Same ID returned | Medium |
+| TC-042 | Security | All security headers | None | GET / | nosniff, DENY, CSP, Permissions-Policy | High |
+| TC-043 | Security | Gzip compression | None | GET / with Accept-Encoding: gzip | 200 (compressed for large responses) | Low |
+| TC-044 | Security | 404 API returns JSON | None | GET /api/v1/nonexistent | 404, application/json | Medium |
+| TC-045 | Security | 404 page returns HTML | None | GET /does-not-exist | 404, text/html | Medium |

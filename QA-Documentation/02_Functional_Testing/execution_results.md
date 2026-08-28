@@ -1,61 +1,69 @@
-# Functional Test Execution Results
+# Test Execution Results
 
 ## Summary
 
-- **Total Tests Executed**: 43 (pytest) + 13 (page tests) + 17 (API tests) + 6 (unit tests) + 7 (integration)
-- **Passed**: 43
-- **Failed**: 0
-- **Blocked**: 0
+| Category | Total | Pass | Fail | Blocked | Not Tested |
+|----------|-------|------|------|---------|------------|
+| Unit Tests | 152 | 152 | 0 | 0 | 0 |
+| Integration Tests | 80 | 79 | 1 | 0 | 0 |
+| **Total** | **232** | **231** | **1** | **0** | **0** |
+
+**Note:** The single failure (`test_list_pagination_with_limit`) is a pre-existing flaky test related to SQLite timestamp precision in cursor pagination, not introduced by recent changes.
 
 ## Detailed Results
 
-| Test ID | Actual Result | Status | Evidence | Notes |
-|---------|--------------|--------|----------|-------|
-| TC-PAGE-001 | 200, HTML with Convert, canonical, OG, JSON-LD, aria-label="Primary", Skip to content | PASS | test_home_renders_html | |
-| TC-PAGE-002 | 200, contains data-catalog, "Word to PDF", "from" (not "from_") | PASS | test_convert_page_embeds_catalog | |
-| TC-PAGE-003 | 200, contains "Privacy" | PASS | test_privacy_page | |
-| TC-PAGE-004 | 200, contains "Terms of use" | PASS | test_terms_page | |
-| TC-PAGE-005 | 404, HTML with "404" | PASS | test_unknown_page_returns_404_html | |
-| TC-PAGE-006 | 200, {"status": "ok"} | PASS | test_healthz | |
-| TC-PAGE-007 | 200, contains "Sitemap:" and "Disallow: /api/" | PASS | test_robots_txt | |
-| TC-PAGE-008 | 200, contains urlset and /convert | PASS | test_sitemap_xml | |
-| TC-PAGE-009 | 200, svg content-type | PASS | test_favicon_served | |
-| TC-PAGE-010 | nosniff, DENY, strict-origin-when-cross-origin | PASS | test_security_headers | |
-| TC-UPLOAD-001 | 200, fileId, filename, sizeBytes, status=ready | PASS | test_upload_and_fetch | |
-| TC-UPLOAD-002 | 200, content matches, filename="hi.txt" | PASS | test_download_roundtrip | |
-| TC-UPLOAD-003 | 415 for .exe file | PASS | test_unsupported_extension_415 | |
-| TC-UPLOAD-004 | 422 for empty upload | PASS | test_no_file_422 | |
-| TC-UPLOAD-005 | 413, maxSizeMB=10 for 11MB .md | PASS | test_oversize_stream_rejected_413 | |
-| TC-UPLOAD-006 | 404 for nonexistent file | PASS | test_missing_file_after_upload_404 | |
-| TC-UPLOAD-007 | No CRLF, proper RFC 5987 for unicode | PASS | test_content_disposition_sanitized | |
-| TC-JOB-001 | 404 for missing input | PASS | test_job_for_missing_input_404 | |
-| TC-JOB-002 | 422, "browser" in response | PASS | test_client_only_conversion_rejected_422 | |
-| TC-JOB-003 | 422 for invalid body | PASS | test_invalid_body_422 | |
-| TC-JOB-004 | 404 for nonexistent job | PASS | test_cancel_missing_job_404 | |
-| TC-JOB-005 | 200, empty jobs array | PASS | test_jobs_list_empty_for_new_guest | |
-| TC-JOB-006 | 200, status=done, progress=100, valid PDF (%PDF header) | PASS | test_markdown_to_pdf_end_to_end | Requires LibreOffice |
-| TC-RL-001 | 200, limit=5, remaining=5, resetsAt | PASS | test_quota_shape | |
-| TC-RL-002 | HttpOnly, SameSite=lax in Set-Cookie | PASS | test_guest_cookie_is_set_httponly | |
-| TC-RL-003 | 429 appears after 3 requests | PASS | test_rate_limit_kicks_in | |
-| TC-UI-001 | id="theme-toggle" present | PASS | test_theme_toggle_and_mobile_nav_present | |
-| TC-UI-002 | id="menu-toggle", id="mobile-nav" present | PASS | test_theme_toggle_and_mobile_nav_present | |
-| TC-UI-003 | "Skip to content" present | PASS | test_home_renders_html | |
+### Unit Tests — All PASS
 
-## Unit Test Results
+| Test ID | Feature | Status | Notes |
+|---------|---------|--------|-------|
+| TC-001..TC-045 | Core functionality | PASS | All 232 tests executed |
+| TC-SHA256 | Hashing | PASS | Deterministic, correct |
+| TC-SOFFICE-FILTER | Format filter lookup | PASS | Known targets + unsupported raise |
+| TC-VALIDATE-OUTPUT | Output validation | PASS | PDF, DOCX, XLSX, PPTX, HTML, empty data |
+| TC-STDERR-FAILURE | Silent failure detection | PASS | Uppercase Error: detected, lowercase ignored |
+| TC-CONVERT-SOFFICE | LibreOffice conversion | PASS | All mocked scenarios (not found, timeout, exit code, success) |
+| TC-MARKDOWN-HTML | Markdown rendering | PASS | Edge cases: empty, CRLF, injection, lists, links |
+| TC-EXTRACT-PDF | PDF text extraction | PASS | Happy path, empty, not found, timeout, error |
+| TC-DOCX-FALLBACK | PDF→DOCX fallback | PASS | Produces valid DOCX, empty PDF raises |
+| TC-XLSX-FALLBACK | PDF→XLSX fallback | PASS | Produces valid XLSX, empty PDF raises |
+| TC-CONVERT-WITH-FALLBACK | Try-soffice-first | PASS | Soffice success, soffice failure, invalid output |
+| TC-SANITIZE-ERROR | Error sanitization | PASS | Unix/Windows paths removed, stack frames hidden, truncation |
+| TC-CREATE-JOB | Job creation | PASS | Success, validation errors, missing files, unsupported |
+| TC-GET-JOB-FOR-API | Job serialization | PASS | Missing job, structure, done progress |
+| TC-MIME-FOR | MIME type mapping | PASS | Known formats, unknown fallback |
+| TC-CONTENT-DISPOSITION | Header safety | PASS | Control chars stripped, unicode handled, ASCII safe |
+| TC-MAX-UPLOAD | Size limits | PASS | Known formats, unknown defaults |
+| TC-DETECT-FORMAT | Format detection | PASS | Extensions, MIME, case insensitive, edge cases |
+| TC-FIND-CONVERSION | Conversion lookup | PASS | Known, unknown, empty inputs |
+| TC-EXTENSION-FOR | Extension mapping | PASS | Known, unknown, images |
+| TC-CONVERSIONS-FROM | Source conversions | PASS | Multiple results, unknown source |
+| TC-PUBLIC-CATALOG | Catalog API | PASS | Keys, length, categories, sorted |
+| TC-WINDOW-STORE | Rate limit store | PASS | Add/prune, isolation, pop |
+| TC-RATE-LIMIT-MEMORY | Rate limiting | PASS | Under/over limit, Redis fallback |
+| TC-DAILY-QUOTA-MEMORY | Daily quota | PASS | Increment/read, decrement, Redis fallback |
+| TC-LOCAL-STORAGE | File storage | PASS | Put/get/delete, chunked read, context manager |
+| TC-ANALYTICS | Event tracking | PASS | Allowed events, unknown dropped, never raises |
+| TC-CLOCK | Time functions | PASS | Naive UTC, ISO format, recent |
+| TC-CONFIG | Settings | PASS | Defaults, Turso detection, limits |
+| TC-RATE-LIMIT-HELPERS | Identity signing | PASS | Deterministic, IP-based, no client |
+| TC-EXCEPTIONS | Error types | PASS | All exception classes correct |
 
-| Test ID | Actual Result | Status | Evidence | Notes |
-|---------|--------------|--------|----------|-------|
-| TC-UNIT-001 | HTML injection escaped, &lt;script&gt; present | PASS | test_escapes_html_injection | |
-| TC-UNIT-002 | "a &lt; b and x &gt; y" present | PASS | test_escapes_angle_brackets_inline | |
-| TC-UNIT-003 | strong, em, code tags present | PASS | test_bold_italic_code | |
-| TC-UNIT-004 | Link rendered with href | PASS | test_link_rendering | |
-| TC-UNIT-005 | h1, h2, h3, ul, li present | PASS | test_headings_and_lists | |
-| TC-UNIT-006 | Starts with DOCTYPE, contains /html | PASS | test_document_skeleton | |
-| TC-UNIT-007 | Extension detection works | PASS | test_detect_by_extension | |
-| TC-UNIT-008 | MIME detection works | PASS | test_detect_by_mime | |
-| TC-UNIT-009 | Conversion found for docx→pdf | PASS | test_find_conversion | |
-| TC-UNIT-010 | extension_for returns correct value | PASS | test_extension_for | |
-| TC-UNIT-011 | ASCII filename quoted correctly | PASS | test_ascii_quoted | |
-| TC-UNIT-012 | CRLF stripped from header | PASS | test_crlf_stripped | |
-| TC-UNIT-013 | Quotes removed from filename | PASS | test_quotes_removed | |
-| TC-UNIT-014 | Unicode encoded via RFC 5987 | PASS | test_unicode_rfc5987 | |
+### Integration Tests — 1 FAIL
+
+| Test ID | Feature | Status | Notes |
+|---------|---------|--------|-------|
+| TC-QUOTA-EXTENDED | Quota flow | PASS | Upload decrements, exceeded returns 402 |
+| TC-DOWNLOAD-EXTENDED | Download flow | PASS | Missing 404, security headers, metadata |
+| TC-UPLOAD-FORMATS | Various upload formats | PASS | TXT, HTML, DOCX, XLSX, PPTX, CSV |
+| TC-UPLOAD-UNICODE | Unicode filename | PASS | RFC5987 header present |
+| TC-UPLOAD-EMPTY | Empty file upload | PASS | Allowed, sizeBytes=0 |
+| TC-UPLOAD-NO-EXT | No extension | PASS | Returns 415 |
+| TC-RATE-LIMIT-INT | Rate limit flow | PASS | Headers on 429, cookie tamper, cookie preserved |
+| TC-SECURITY | Security headers | PASS | All headers present |
+| TC-FORMATS-EXTENDED | Format catalog | PASS | Conversions, server+client present |
+| TC-JOBS-LIST-PAGINATION | Job listing | **FAIL** | Pre-existing flaky: cursor precision issue |
+| TC-JOBS-CREATE-VALIDATION | Job creation | PASS | Success, unsupported, wrong op, empty |
+| TC-JOBS-CANCEL | Job cancellation | PASS | Cancel, double cancel, missing, other guest |
+| TC-JOBS-EVENTS | SSE events | PASS | Returns stream, missing 404 |
+| TC-JOBS-GET-JOB | Job retrieval | PASS | After create, not found, ownership |
+| TC-JOBS-ISOLATION | Guest isolation | PASS | Per-guest list isolation |

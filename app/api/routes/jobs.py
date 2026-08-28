@@ -109,22 +109,37 @@ async def list_jobs(
         .filter(Job.guest_id == identity)
     )
     if cursor:
-        ts_str, _, cursor_id = cursor.partition(":")
-        try:
-            ts = int(ts_str)
-        except ValueError:
-            ts = 0
-        # DB stores naive UTC datetimes; compare with naive to avoid tz mismatches.
-        cursor_dt = datetime.fromtimestamp(ts, tz=timezone.utc).replace(tzinfo=None)
-        if cursor_id:
-            query = query.filter(
-                (Job.created_at < cursor_dt)
-                | ((Job.created_at == cursor_dt) & (Job.id < cursor_id))
-            )
+        # Cursor format: "{created_at_iso}:{job_id}"
+        # Use rpartition to split on the LAST colon, since ISO timestamps
+        # contain colons (e.g. T22:55) but job IDs do not.
+        ts_str, _, cursor_id = cursor.rpartition(":")
+        if not cursor_id:
+            # Fallback: treat whole string as a legacy float timestamp.
+            try:
+                cursor_dt = datetime.fromtimestamp(int(float(ts_str)), tz=timezone.utc).replace(
+                    tzinfo=None
+                )
+                query = query.filter(Job.created_at <= cursor_dt)
+            except (ValueError, OSError):
+                pass
+        else:
+            try:
+                cursor_dt = datetime.fromisoformat(ts_str)
+                if cursor_dt.tzinfo is not None:
+                    cursor_dt = cursor_dt.replace(tzinfo=None)
+            except (ValueError, TypeError):
+                cursor_dt = None
+            if cursor_dt:
+                query = query.filter(
+                    (Job.created_at < cursor_dt)
+                    | ((Job.created_at == cursor_dt) & (Job.id < cursor_id))
+                )
+
 
     jobs = query.order_by(Job.created_at.desc(), Job.id.desc()).limit(limit + 1).all()
     has_more = len(jobs) > limit
     page = jobs[:limit]
+
 
     def serialize(j: Job):
         return {
@@ -141,7 +156,9 @@ async def list_jobs(
     next_cursor = None
     if has_more and page:
         last = page[-1]
-        next_cursor = f"{int(last.created_at.timestamp())}:{last.id}"
+        # Store the raw ISO datetime to avoid float→datetime round-trip
+        # precision issues across timezones.
+        next_cursor = f"{last.created_at.isoformat()}:{last.id}"
 
     return {"jobs": [serialize(j) for j in page], "nextCursor": next_cursor}
 

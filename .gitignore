@@ -42,3 +42,4 @@ htmlcov/
 
 # AI tooling
 .opencode/
+.vercel

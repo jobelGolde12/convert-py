@@ -142,8 +142,12 @@ def validate_output(target: str, data: bytes) -> None:
         raise OfficeError("Engine produced an invalid PDF", "CONVERSION_FAILED")
     if target in {"docx", "xlsx", "pptx"} and not head.startswith(b"PK"):
         raise OfficeError(f"Engine produced an invalid {target.upper()} file", "CONVERSION_FAILED")
-    if target == "html" and head[:1] not in {b"<", b" "}:
-        raise OfficeError("Engine produced an invalid HTML file", "CONVERSION_FAILED")
+    if target == "html":
+        # Check the first 512 bytes for common HTML markers.
+        head_512 = data[:512].lower()
+        html_markers = (b"<!doctype", b"<html", b"<head", b"<body", b"<meta")
+        if not any(m in head_512 for m in html_markers):
+            raise OfficeError("Engine produced an invalid HTML file", "CONVERSION_FAILED")
 
 
 # ---------------------------------------------------------------------------

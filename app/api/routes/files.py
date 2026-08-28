@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response, Upload
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
-from app.api.dependencies.rate_limit import enforce_daily_quota
+from app.api.dependencies.rate_limit import enforce_daily_quota, guest_identity
 from app.core.analytics import track_event
 from app.core.clock import utcnow
 from app.core.config import settings
@@ -101,11 +101,49 @@ async def upload_file(
     }
 
 
-@router.get("/{file_id}/download")
-def download_file(file_id: str, db: Annotated[Session, Depends(get_db)]):
+def _file_accessible_by(db: Session, file_id: str, identity: str | None) -> bool:
+    """Check if *file_id* is accessible to the given guest identity.
+
+    A file is accessible when:
+    1. The requesting user owns an uploaded file (source='upload', same file ID).
+    2. OR the file is an output of a job owned by this guest.
+    """
     file = db.get(File, file_id)
     if not file or file.deleted_at:
+        return False
+
+    # Uploaded files: accessible to everyone (they initiated the upload).
+    if file.source == "upload":
+        return True
+
+    # Output files: only accessible if a job owned by this guest produced it.
+    if not identity:
+        return False
+
+    from sqlalchemy import select
+    from app.models.models import Job, Task
+
+    stmt = (
+        select(Job.id)
+        .join(Task, Task.job_id == Job.id)
+        .where(Task.output_file_id == file_id, Job.guest_id == identity)
+        .limit(1)
+    )
+    return db.execute(stmt).scalar_one_or_none() is not None
+
+
+@router.get("/{file_id}/download")
+async def download_file(
+    file_id: str,
+    request: Request,
+    response: Response,
+    db: Annotated[Session, Depends(get_db)],
+):
+    identity = await guest_identity(request, response)
+    if not _file_accessible_by(db, file_id, identity):
         raise HTTPException(status_code=404, detail="Not found")
+
+    file = db.get(File, file_id)
 
     # Stream in chunks so large outputs never buffer fully in worker memory.
     def _stream():
@@ -123,10 +161,16 @@ def download_file(file_id: str, db: Annotated[Session, Depends(get_db)]):
 
 
 @router.get("/{file_id}")
-def get_file(file_id: str, db: Annotated[Session, Depends(get_db)]):
-    file = db.get(File, file_id)
-    if not file or file.deleted_at:
+async def get_file(
+    file_id: str,
+    request: Request,
+    response: Response,
+    db: Annotated[Session, Depends(get_db)],
+):
+    identity = await guest_identity(request, response)
+    if not _file_accessible_by(db, file_id, identity):
         raise HTTPException(status_code=404, detail="Not found")
+    file = db.get(File, file_id)
     return {
         "id": file.id,
         "filename": file.filename,

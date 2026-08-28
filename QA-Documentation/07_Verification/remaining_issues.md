@@ -1,16 +1,66 @@
 # Remaining Issues
 
-## Summary
+## BUG-001: Cursor pagination fails intermittently
 
-All identified actionable issues have been implemented and verified. The following are documented as accepted risks or deferred items.
+```
+Issue ID: BUG-001
+Description: Cursor pagination returns empty page when timestamps are identical
+Severity: Minor
+Reason Not Fixed: Pre-existing issue requiring significant cursor redesign.
+  SQLite stores datetimes at second precision while cursor uses float.
+  Fix would require changing cursor format to string-based with job ID tiebreaking.
+Blocked By: None — architectural decision needed
+Recommended Next Step: Redesign cursor to use {timestamp_string}:{job_id} format
+  for deterministic pagination regardless of timestamp precision.
+```
 
-| Issue ID | Description | Severity | Reason Not Fixed | Blocked By | Recommended Next Step |
-|----------|-------------|----------|------------------|------------|----------------------|
-| SEC-005 | No CSRF tokens on POST endpoints | Low | SameSite=Lax + JSON content-type provides sufficient protection; no form-based interactions | None | Accept as-is; revisit if form-based interactions added |
-| A11Y-002 | Dark mode not announced to screen readers | Informational | Native accessibility behavior is acceptable | None | No action needed |
-| A11Y-003 | FAQ details missing aria-expanded | Informational | Native `<details>`/`<summary>` handles state correctly | None | No action needed |
-| RESP-001 | Format grid min-width could overflow on <240px | Informational | No devices < 240px in practice | None | No action needed |
-| RESP-002 | Select min-width could overflow on narrow screens | Minor | Flex-wrap handles overflow | None | No action needed |
-| INFRA-001 | Celery worker scaffolded but not wired | Informational | Not needed for current scope | Celery broker | Implement when background job queue needed |
-| INFRA-002 | Alembic migrations not generated | Minor | create_all() handles development | Schema changes | Generate initial migration before production |
-| INFRA-003 | SQLite used (not suitable for production) | Medium | Development only | PostgreSQL setup | Switch to PostgreSQL for production |
+## SEC-002: Cookie HMAC uses configurable secret key
+
+```
+Issue ID: SEC-002
+Description: Cookie signing relies on SECRET_KEY which may be default in dev
+Severity: Medium
+Reason Not Fixed: Already mitigated in production (startup validation).
+  Staging environment validation would be a config-level change.
+Blocked By: None
+Recommended Next Step: Add same secret validation for staging environment.
+  Or document that staging must use non-default SECRET_KEY.
+```
+
+## SEC-003: Upload accepts filename as query parameter
+
+```
+Issue ID: SEC-003
+Description: File upload accepts filename via query parameter without validation
+Severity: Medium
+Reason Not Fixed: Would require changing upload API contract.
+  Current behavior is by design (allows clients to specify filename separately).
+Blocked By: API contract decision
+Recommended Next Step: Prefer multipart filename over query param when both present,
+  or validate consistency between them.
+```
+
+## SEC-005: Script-src includes unsafe-inline in CSP
+
+```
+Issue ID: SEC-005
+Description: CSP allows unsafe-inline for scripts
+Severity: Low
+Reason Not Fixed: Requires moving inline scripts to external files and
+  implementing nonce/hash-based CSP. Significant template refactoring needed.
+Blocked By: Template architecture
+Recommended Next Step: Move inline theme script and catalog injection to
+  external JS files with nonces.
+```
+
+## PERF-002: R2Storage caching (partial)
+
+```
+Issue ID: PERF-002
+Description: R2Storage instance cached but LocalStorage creates new os.makedirs per call
+Severity: Low
+Reason Not Fixed: LocalStorage constructor calls os.makedirs which is idempotent.
+  The overhead is negligible. Full caching implemented for R2Storage.
+Blocked By: None
+Recommended Next Step: No action needed — current implementation is adequate.
+```

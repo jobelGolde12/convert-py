@@ -153,12 +153,15 @@ def _convert_with_fallback(
     target: str,
     fallback_fn: Any,
     label: str,
+    profile_dir: str | None = None,
 ) -> Any:
     """Try soffice first; if it fails or produces invalid output, use *fallback_fn*."""
     try:
         log.info("Trying soffice for %s", label)
         result = convert_with_soffice(
-            input_path, out_dir, target, timeout_ms=settings.lo_timeout_ms
+            input_path, out_dir, target,
+            profile_dir=profile_dir,
+            timeout_ms=settings.lo_timeout_ms,
         )
         with open(result.output_path, "rb") as fh:
             validate_output(target, fh.read())
@@ -212,7 +215,9 @@ def process_office_job(job_id: str, guest_id: str | None = None) -> None:
 
         tmp = os.path.join(settings.lo_profile_root, f"convert-{job_id}-{uuid.uuid4().hex}")
         out_dir = os.path.join(tmp, "out")
+        profile_dir = os.path.join(tmp, "profile")
         os.makedirs(out_dir, exist_ok=True)
+        os.makedirs(profile_dir, exist_ok=True)
         output_path: str | None = None
         out_id: str | None = None
         storage_key: str | None = None
@@ -239,6 +244,7 @@ def process_office_job(job_id: str, guest_id: str | None = None) -> None:
                     input_path, out_dir, target,
                     convert_pdf_to_docx_fallback,
                     "PDF→DOCX",
+                    profile_dir=profile_dir,
                 )
             # PDF → XLSX: try soffice first, fallback to pdftotext+xlsx.
             elif source == "pdf" and target == "xlsx":
@@ -247,6 +253,7 @@ def process_office_job(job_id: str, guest_id: str | None = None) -> None:
                     input_path, out_dir, target,
                     convert_pdf_to_xlsx_fallback,
                     "PDF→XLSX",
+                    profile_dir=profile_dir,
                 )
             elif source == "md" and target == "pdf":
                 html = markdown_to_html(input_buf.decode("utf-8"))
@@ -255,12 +262,14 @@ def process_office_job(job_id: str, guest_id: str | None = None) -> None:
                     f.write(html)
                 _set_task_progress(db, task.id, 45)
                 res = convert_with_soffice(
-                    html_path, out_dir, target, timeout_ms=settings.lo_timeout_ms
+                    html_path, out_dir, target,
+                    profile_dir=profile_dir, timeout_ms=settings.lo_timeout_ms,
                 )
             else:
                 _set_task_progress(db, task.id, 45)
                 res = convert_with_soffice(
-                    input_path, out_dir, target, timeout_ms=settings.lo_timeout_ms
+                    input_path, out_dir, target,
+                    profile_dir=profile_dir, timeout_ms=settings.lo_timeout_ms,
                 )
 
             output_path = res.output_path
