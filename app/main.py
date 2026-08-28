@@ -127,6 +127,9 @@ async def lifespan(application: FastAPI):
     try:
         init_db()
     except Exception:
+        if settings.is_prod:
+            logger.error("Database initialization failed in production", exc_info=True)
+            raise
         logger.warning("Database initialization failed; some features may be unavailable.", exc_info=True)
     yield
 

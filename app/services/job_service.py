@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 import uuid
@@ -25,6 +26,8 @@ from app.core.exceptions import (
 from app.models.models import Conversion, File, Job, Task
 from app.core.conversions_catalog import detect_format, extension_for, find_conversion
 from app.services.conversion_service import (
+    convert_pdf_to_docx_fallback,
+    convert_pdf_to_xlsx_fallback,
     convert_with_soffice,
     markdown_to_html,
     sha256,
@@ -32,6 +35,8 @@ from app.services.conversion_service import (
 )
 from app.services.file_service import mime_for
 from app.services.storage_service import get_storage
+
+log = logging.getLogger(__name__)
 
 
 def create_server_job(
@@ -142,6 +147,27 @@ def _fail_job(
             pass
 
 
+def _convert_with_fallback(
+    input_path: str,
+    out_dir: str,
+    target: str,
+    fallback_fn: Any,
+    label: str,
+) -> Any:
+    """Try soffice first; if it fails or produces invalid output, use *fallback_fn*."""
+    try:
+        log.info("Trying soffice for %s", label)
+        result = convert_with_soffice(
+            input_path, out_dir, target, timeout_ms=settings.lo_timeout_ms
+        )
+        with open(result.output_path, "rb") as fh:
+            validate_output(target, fh.read())
+        return result
+    except (OfficeError, OSError, ValueError) as exc:
+        log.info("soffice %s failed (%s); using fallback", label, exc)
+        return fallback_fn(input_path, out_dir)
+
+
 def process_office_job(job_id: str, guest_id: str | None = None) -> None:
     with session_scope() as db:
         job = db.get(Job, job_id)
@@ -201,7 +227,28 @@ def process_office_job(job_id: str, guest_id: str | None = None) -> None:
             with open(input_path, "wb") as f:
                 f.write(input_buf)
 
-            if source == "md" and target == "pdf":
+            log.info(
+                "Starting conversion: %s → %s (source=%s, target=%s, file=%s)",
+                source, target, source, target, input_path,
+            )
+
+            # PDF → DOCX: try soffice first (Draw limitation), fallback to pdftotext+docx.
+            if source == "pdf" and target == "docx":
+                _set_task_progress(db, task.id, 45)
+                res = _convert_with_fallback(
+                    input_path, out_dir, target,
+                    convert_pdf_to_docx_fallback,
+                    "PDF→DOCX",
+                )
+            # PDF → XLSX: try soffice first, fallback to pdftotext+xlsx.
+            elif source == "pdf" and target == "xlsx":
+                _set_task_progress(db, task.id, 45)
+                res = _convert_with_fallback(
+                    input_path, out_dir, target,
+                    convert_pdf_to_xlsx_fallback,
+                    "PDF→XLSX",
+                )
+            elif source == "md" and target == "pdf":
                 html = markdown_to_html(input_buf.decode("utf-8"))
                 html_path = os.path.join(tmp, "input.html")
                 with open(html_path, "w", encoding="utf-8") as f:
@@ -217,6 +264,7 @@ def process_office_job(job_id: str, guest_id: str | None = None) -> None:
                 )
 
             output_path = res.output_path
+            log.info("Conversion produced output: %s", output_path)
             _set_task_progress(db, task.id, 70)
 
             with open(output_path, "rb") as fh:
@@ -284,6 +332,11 @@ def process_office_job(job_id: str, guest_id: str | None = None) -> None:
             task.output_file_id = out_id
             db.commit()
 
+            log.info(
+                "Conversion completed (job=%s, %s→%s, %dms, %d→%d bytes)",
+                job_id, source, target, elapsed,
+                input_file.size_bytes, len(out_buf),
+            )
             track_event(
                 "conversion_completed",
                 job_id=job_id,
@@ -297,6 +350,10 @@ def process_office_job(job_id: str, guest_id: str | None = None) -> None:
         except Exception as exc:
             code = exc.code if isinstance(exc, OfficeError) else "CONVERSION_FAILED"
             message = str(exc)[:500]
+            log.error(
+                "Conversion failed (job=%s, %s→%s, code=%s): %s",
+                job_id, source, target, code, message,
+            )
             _fail_job(db, job_id, task.id, code, message, guest_id)
             track_event(
                 "conversion_failed",
